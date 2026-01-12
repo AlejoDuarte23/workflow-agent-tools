@@ -10,7 +10,7 @@ from app.types import (
     CrossSectionsDict,
     material_dict,
 )
-from app.opensees.utils import v_cross, v_sub, v_norm, get_nodes_by_z
+from app.opensees.utils import v_cross, v_sub, v_norm
 from collections import defaultdict
 from typing import DefaultDict, Annotated
 
@@ -24,6 +24,7 @@ class Model:
         lines: LinesDict,
         cross_sections: CrossSectionsDict,
         members: MembersDict,
+        support_nodes: Annotated[list[int] | None, "Node IDs to fix as supports"] = None,
         nodesWithLoad: Annotated[list[int] | None, "Joist Nodes"] = None,
         nodalLoadMagnitud: Annotated[float | None, "Load to be applied in Newton per Node"] = None
     ) -> None:
@@ -31,6 +32,7 @@ class Model:
         self.lines = lines
         self.cross_sections = cross_sections
         self.members = members
+        self.support_nodes = support_nodes if support_nodes is not None else []
         self.materials:MaterialDictType = material_dict
         self.mass: MassDict = {}
         self.g = 10000 #9800
@@ -82,10 +84,15 @@ class Model:
                 support_nodes.append(node_data["id"])
         return support_nodes
 
-    def assign_support(self)->None:
-        ground_nodes = get_nodes_by_z(self.nodes, z=0)
-        for node_tag in ground_nodes:
-            ops.fix(node_tag, 1,1,1,1,1,1)
+    def assign_support(self, support_nodes: list[int] | None = None) -> None:
+        """Assign fixed supports to specified nodes.
+        
+        Args:
+            support_nodes: List of node IDs to fix. If None, uses self.support_nodes.
+        """
+        nodes_to_fix = support_nodes if support_nodes is not None else self.support_nodes
+        for node_tag in nodes_to_fix:
+            ops.fix(node_tag, 1, 1, 1, 1, 1, 1)
 
     def create_beam_elements(
         self,

@@ -140,12 +140,20 @@ class Controller(vkt.Controller):
                 "material_name": "Steel",
             }
         
+        # Identify support nodes: z=0 AND (x=0 OR x=length)
+        from app.opensees.utils import get_nodes_by_x_and_z
+        length = params.step_1.geometry.truss_length
+        support_nodes_start = get_nodes_by_x_and_z(nodes_dict, x=0, z=0)
+        support_nodes_end = get_nodes_by_x_and_z(nodes_dict, x=length, z=0)
+        support_nodes = support_nodes_start + support_nodes_end
+        
         # Create and run the OpenSees model
         model = Model(
             nodes=nodes_dict,
             lines=lines_dict,
             cross_sections=cross_sections,
             members=members,
+            support_nodes=support_nodes,
         )
         
         model.create_model()
