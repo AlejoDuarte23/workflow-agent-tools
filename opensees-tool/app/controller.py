@@ -26,7 +26,7 @@ Select a cross section size for the truss members:""")
     step_1.cross_section = vkt.OptionField(
         "Cross-Section Size", 
         options=["SHS50x4", "SHS75x4", "SHS100x4", "SHS150x4"], 
-        default="SHS50x4"
+        default="SHS100x4"
     )
     
     # Step 2: Loads (Gravitational + Wind)

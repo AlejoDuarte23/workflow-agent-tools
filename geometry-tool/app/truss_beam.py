@@ -92,11 +92,11 @@ class RectangularTrussBeam(Component):
     def create_vertical_bracing(self, chord_a_ids: list[int], chord_b_ids: list[int]) -> None:
         """Create vertical bracing (struts) between two chords at even indices."""
         for i, (tag_a, tag_b) in enumerate(zip(chord_a_ids, chord_b_ids)):
-            if i % 2 == 0:
-                self.lines[self.create_line_tag()] = {
-                    "NodeI": tag_a,
-                    "NodeJ": tag_b,
-                }
+            #if i % 2 == 0:
+            self.lines[self.create_line_tag()] = {
+                "NodeI": tag_a,
+                "NodeJ": tag_b,
+            }
 
     def build(self) -> tuple[
         Annotated[dict[int, NodeDict], "Dictionary of node IDs to node coordinates"],
@@ -129,7 +129,7 @@ class RectangularTrussBeam(Component):
         # Left face (z=0): between bottom-left and top-left
         self.create_diagonals(chord_bl_ids, chord_tl_ids)
         # Right face (z=width): between bottom-right and top-right
-        self.create_diagonals(chord_tr_ids, chord_br_ids)
+        self.create_diagonals(chord_br_ids, chord_tr_ids)
         # Bottom face (y=0): between bottom-left and bottom-right
         self.create_diagonals(chord_bl_ids, chord_br_ids)
         # Top face (y=height): between top-left and top-right

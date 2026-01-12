@@ -1,6 +1,8 @@
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+
+from app.types import MemberType
 Vec3 = np.ndarray
 
 def compute_beam_vertices_rect(A: Vec3, B: Vec3, width: float, height: float) -> np.ndarray:
@@ -109,14 +111,11 @@ def plot_deformed_mesh(
             "z": data["z"] + get_disp(nid, "dz") * scale,
         }
 
-    def disp_mag(nid: int) -> float:
-        dx = get_disp(nid, "dx")
-        dy = get_disp(nid, "dy")
-        dz = get_disp(nid, "dz")
-        return float((dx * dx + dy * dy + dz * dz) ** 0.5)
-
-    # mean displacement magnitude per line (for coloring)
-    line_disp = {lid: (disp_mag(ln["Ni"]) + disp_mag(ln["Nj"])) / 2.0 for lid, ln in lines.items()}
+    # mean z-displacement per line (for coloring)
+    line_disp = {
+        lid: (get_disp(ln["Ni"], "dz") + get_disp(ln["Nj"], "dz")) / 2.0
+        for lid, ln in lines.items()
+    }
     dmin, dmax = (min(line_disp.values()), max(line_disp.values())) if line_disp else (0.0, 0.0)
 
     # ------------------------------------------------------------------ #
@@ -196,7 +195,7 @@ def plot_deformed_mesh(
                 color=[dmin, dmax],
                 showscale=True,
                 colorbar=dict(
-                    title="ΔU [mm]",
+                    title="ΔZ [mm]",
                     # -- size ----------------------------------------------------------------
                     len=0.45,  # 45 % of plot height  (default: 1.0 = full height)
                     lenmode="fraction",  # "fraction" = percentage, "pixels" = absolute px
@@ -219,25 +218,46 @@ def plot_deformed_mesh(
     )
 
     # ------------------------------------------------------------------ #
+    # 3. Section legend entries
+    # ------------------------------------------------------------------ #
+    legend_labels = set()
+    for lid, ln in lines.items():
+        m_type: MemberType | None = ln.get("Type")
+        if m_type is None:
+            continue
+        cs_id = members[lid]["cross_section_id"]
+        if cs_id not in cross_sections:
+            continue
+        desc = cross_sections[cs_id].get("Description", f"Section {cross_sections[cs_id]['name']}")
+        legend_labels.add(f"{m_type}: {desc}")
+
+    for label in sorted(legend_labels):
+        fig.add_trace(
+            go.Scatter3d(
+                x=[None],
+                y=[None],
+                z=[None],
+                mode="markers",
+                marker=dict(size=8, color="rgba(0,0,0,0)", symbol="square"),
+                name=label,
+                legendgroup="sections",
+                hoverinfo="skip",
+            )
+        )
+
+    # ------------------------------------------------------------------ #
     # 4. Max-displacement box with critical combination info
     # ------------------------------------------------------------------ #
-    dx_abs_max = max(abs(get_disp(nid, "dx")) for nid in nodes) if nodes else 0.0
-    dy_abs_max = max(abs(get_disp(nid, "dy")) for nid in nodes) if nodes else 0.0
-    dz_abs_max = max(abs(get_disp(nid, "dz")) for nid in nodes) if nodes else 0.0
-    du_abs_max = max(disp_mag(nid) for nid in nodes) if nodes else 0.0
+    max_abs = max(abs(dmin), abs(dmax))
     
     # Build annotation text with critical combination if provided
     if critical_combination_name:
-        annotation_text = f"<b>Critical Combination: {critical_combination_name}</b><br>"
+        annotation_text = (
+            f"<b>Critical Combination: {critical_combination_name}</b><br>"
+            f"Max Model Deformation |ΔZ|: {max_abs:.3f} mm"
+        )
     else:
-        annotation_text = "<b>Max Model Deformation</b><br>"
-
-    annotation_text += (
-        f"Max |ΔUx|: {dx_abs_max:.3f} mm &nbsp;&nbsp;"
-        f"Max |ΔUy|: {dy_abs_max:.3f} mm &nbsp;&nbsp;"
-        f"Max |ΔUz|: {dz_abs_max:.3f} mm<br>"
-        f"Max |ΔU|: {du_abs_max:.3f} mm"
-    )
+        annotation_text = f"<b>Max Model Deformation |ΔZ|</b><br>{max_abs:.3f} mm"
     
     fig.add_annotation(
         text=annotation_text,
@@ -263,7 +283,17 @@ def plot_deformed_mesh(
             bgcolor="white",
             camera=dict(eye=dict(x=1.3, y=1.3, z=1.3)),
         ),
-        showlegend=False,
+        legend=dict(
+            title=dict(text="Sections"),
+            x=0.02,
+            y=0.02,  # bottom-left
+            xanchor="left",
+            yanchor="bottom",
+            bgcolor="rgba(255,255,255,0.85)",
+            borderwidth=1,
+            itemsizing="constant",
+            font=dict(size=16, color="black"),
+        ),
         paper_bgcolor="white",
         margin=dict(l=0, r=0, t=40, b=0),
     )
