@@ -9,6 +9,7 @@ from app.types import (
     MassDict,
     CrossSectionsDict,
     material_dict,
+    LoadCase,
 )
 from app.opensees.utils import v_cross, v_sub, v_norm
 from collections import defaultdict
@@ -25,20 +26,20 @@ class Model:
         cross_sections: CrossSectionsDict,
         members: MembersDict,
         support_nodes: Annotated[list[int] | None, "Node IDs to fix as supports"] = None,
-        nodesWithLoad: Annotated[list[int] | None, "Joist Nodes"] = None,
-        nodalLoadMagnitud: Annotated[float | None, "Load to be applied in Newton per Node"] = None
+        load_cases: Annotated[list[LoadCase] | None, "List of load cases to apply"] = None,
     ) -> None:
         self.nodes = nodes
         self.lines = lines
         self.cross_sections = cross_sections
         self.members = members
         self.support_nodes = support_nodes if support_nodes is not None else []
-        self.materials:MaterialDictType = material_dict
+        self.load_cases = load_cases if load_cases is not None else []
+        self.materials: MaterialDictType = material_dict
         self.mass: MassDict = {}
-        self.g = 10000 #9800
-        self.loadsDict: DefaultDict[int, float] = defaultdict(float)
-        self.nodesWithLoad = nodesWithLoad
-        self.nodalLoadMagnitud = nodalLoadMagnitud
+        self.g = 10000  # 9800
+        self.loadsDict: DefaultDict[int, dict[str, float]] = defaultdict(
+            lambda: {"fx": 0.0, "fy": 0.0, "fz": 0.0, "mx": 0.0, "my": 0.0, "mz": 0.0}
+        )
 
     def create_nodes(self) -> None:
         for n in self.nodes.values():
@@ -176,17 +177,35 @@ class Model:
                 )
     
     def create_loads(self):
-        """Create self weight load and point loads"""
-        for notetag, mass_values in self.mass.items():
-            # Mass in opensees is N/g * g to loads
-            self.loadsDict[notetag] += mass_values["mass_z"]*self.g
+        """Create self weight load and apply all load cases with their factors."""
+        # Add self-weight loads (always applied)
+        for nodetag, mass_values in self.mass.items():
+            # Mass in opensees is N/g * g to loads (negative z = downward)
+            self.loadsDict[nodetag]["fz"] -= mass_values["mass_z"] * self.g
 
-        if self.nodesWithLoad and self.nodalLoadMagnitud:
-            for nodetag in self.nodesWithLoad:
-                self.loadsDict[nodetag] += self.nodalLoadMagnitud
-            
-        for nodetag, loadMag in self.loadsDict.items():    
-            ops.load(nodetag, 0, 0, -loadMag, 0, 0, 0)
+        # Apply all load cases with their factors
+        for load_case in self.load_cases:
+            factor = load_case.get("factor", 1.0)
+            for load in load_case["loads"]:
+                node_id = load["node_id"]
+                self.loadsDict[node_id]["fx"] += load["fx"] * factor
+                self.loadsDict[node_id]["fy"] += load["fy"] * factor
+                self.loadsDict[node_id]["fz"] += load["fz"] * factor
+                self.loadsDict[node_id]["mx"] += load["mx"] * factor
+                self.loadsDict[node_id]["my"] += load["my"] * factor
+                self.loadsDict[node_id]["mz"] += load["mz"] * factor
+
+        # Apply loads to OpenSees model
+        for nodetag, load_components in self.loadsDict.items():
+            ops.load(
+                nodetag,
+                load_components["fx"],
+                load_components["fy"],
+                load_components["fz"],
+                load_components["mx"],
+                load_components["my"],
+                load_components["mz"],
+            )
 
 
     def create_model(self):

@@ -53,6 +53,24 @@ class NodeMass(TypedDict):
     mass_z: float
 
 
+class NodalLoad(TypedDict):
+    """Nodal load with forces and moments."""
+    node_id: int
+    fx: Annotated[float, "Force in x direction (N)"]
+    fy: Annotated[float, "Force in y direction (N)"]
+    fz: Annotated[float, "Force in z direction (N)"]
+    mx: Annotated[float, "Moment about x axis (N-mm)"]
+    my: Annotated[float, "Moment about y axis (N-mm)"]
+    mz: Annotated[float, "Moment about z axis (N-mm)"]
+
+
+class LoadCase(TypedDict):
+    """Load case with name, factor, and list of nodal loads."""
+    name: str
+    factor: Annotated[float, "Load factor for combinations"]
+    loads: list[NodalLoad]
+
+
 # Aliases
 NodesDict = dict[int, NodeDict]
 LinesDict = dict[int, LineDict]
