@@ -110,3 +110,30 @@ material_dict: MaterialDictType = {
 }
 
 steel_cost: float = 3.81 # Euros
+
+
+class LoadCombination(TypedDict):
+    """Load combination with factors for Q (gravitational) and WL (wind) loads."""
+    name: str
+    Q_factor: Annotated[float, "Factor for gravitational load (Q)"]
+    WL_factor: Annotated[float, "Factor for wind load (WL). Positive = +WL, Negative = -WL"]
+
+
+# SLS Load Combinations (SLS = self-weight is always included)
+SLS_COMBINATIONS: list[LoadCombination] = [
+    {"name": "SLS + Q", "Q_factor": 1.0, "WL_factor": 0.0},
+    {"name": "SLS + Q + WL", "Q_factor": 1.0, "WL_factor": 1.0},
+    {"name": "SLS + Q - WL", "Q_factor": 1.0, "WL_factor": -1.0},
+    {"name": "SLS + 0.6Q + WL", "Q_factor": 0.6, "WL_factor": 1.0},
+    {"name": "SLS + 0.6Q - WL", "Q_factor": 0.6, "WL_factor": -1.0},
+    {"name": "SLS + WL", "Q_factor": 0.0, "WL_factor": 1.0},
+    {"name": "SLS - WL", "Q_factor": 0.0, "WL_factor": -1.0},
+]
+
+
+class CombinationResult(TypedDict):
+    """Result from running a load combination analysis."""
+    combination_name: str
+    max_disp_by_type: dict[str, float]
+    disp_dict: dict[int, float]
+    max_abs_displacement: float

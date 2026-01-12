@@ -5,7 +5,7 @@ import viktor as vkt
 
 from viktor.geometry import Point, Line, RectangularExtrusion
 from app.truss_beam import RectangularTrussBeam
-from app.opensees.model import Model, calculate_displacements
+from app.opensees.model import Model
 from app.types import CrossSectionInfo, NodesInfoDict, LinesInfoDict, MembersDict, CrossSectionsDict, LoadCase, NodalLoad
 from app.plots.deformation import plot_deformed_mesh
 from app.plots.loads import plot_loads_3d, plot_wind_loads_3d
@@ -41,7 +41,18 @@ Define the wind pressure to apply to the truss beam. The load will be visualized
     # Step 3: Run Model
     step_3 = vkt.Step("Step 3 - Run Model", views=["show_deformation"])
     step_3.intro = vkt.Text("""# Run OpenSees Analysis
-Run the structural analysis using OpenSees. The model will be generated based on the geometry defined in Step 1.""")
+Run the structural analysis using OpenSees. The model will be generated based on the geometry defined in Step 1.
+
+The analysis runs 7 SLS load combinations and identifies the critical one:
+- SLS + Q
+- SLS + Q + WL
+- SLS + Q - WL
+- SLS + 0.6Q + WL
+- SLS + 0.6Q - WL
+- SLS + WL
+- SLS - WL
+
+Where **SLS** = Self-weight, **Q** = Gravitational load, **WL** = Wind load.""")
     step_3.run_btn = vkt.ActionButton("Run OpenSees Model", method="run_opensees_model")
     step_3.br1 = vkt.LineBreak()
     step_3.deform_scale = vkt.NumberField("Deformation Scale", min=1, max=500, default=25, step=1)
@@ -234,7 +245,7 @@ class Controller(vkt.Controller):
                 "loads": wind_loads,
             })
         
-        # Create and run the OpenSees model
+        # Create and run the OpenSees model with all load combinations
         model = Model(
             nodes=nodes_dict,
             lines=lines_dict,
@@ -244,23 +255,26 @@ class Controller(vkt.Controller):
             load_cases=load_cases,
         )
         
-        model.create_model()
-        model.run_model()
+        # Run all SLS combinations and find the critical one
+        critical_result, all_results = model.run_all_combinations()
         
-        # Calculate and print displacements
-        max_disp_by_type, disp_dict = calculate_displacements(lines_dict, nodes_dict)
-        
-        print(f"\n{'='*50}")
-        print("OpenSees Analysis Results")
+        print(f"\n{'='*60}")
+        print("OpenSees Analysis Results - All Load Combinations")
         print(f"Cross-Section: {selected_cs_name}")
-        print(f"Load Cases Applied: {[lc['name'] for lc in load_cases]}")
-        print(f"{'='*50}")
-        print("\nMax Displacement by Element Type:")
-        for elem_type, disp in max_disp_by_type.items():
+        print(f"Load Cases Defined: {[lc['name'] for lc in load_cases]}")
+        print(f"{'='*60}")
+        print("\nAll Combinations Results:")
+        print(f"{'-'*60}")
+        for result in all_results:
+            max_abs = result['max_abs_displacement']
+            print(f"  {result['combination_name']:<25}: Max |ΔZ| = {max_abs:.4f} mm")
+        print(f"{'-'*60}")
+        print(f"\n*** CRITICAL COMBINATION: {critical_result['combination_name']} ***")
+        print(f"    Max Absolute Displacement: {critical_result['max_abs_displacement']:.4f} mm")
+        print("\nMax Displacement by Element Type (Critical Combination):")
+        for elem_type, disp in critical_result['max_disp_by_type'].items():
             print(f"  {elem_type}: {disp:.4f} mm")
-        print(f"\nMin Displacement (all nodes): {min(disp_dict.values()):.4f} mm")
-        print(f"Max Displacement (all nodes): {max(disp_dict.values()):.4f} mm")
-        print(f"{'='*50}\n")
+        print(f"{'='*60}\n")
         
         return None
 
@@ -381,7 +395,7 @@ class Controller(vkt.Controller):
                 })
             load_cases.append({"name": "Wind Load", "factor": 1.0, "loads": wind_loads})
         
-        # Create and run the OpenSees model
+        # Create the OpenSees model
         model = Model(
             nodes=nodes_dict,
             lines=lines_dict,
@@ -391,23 +405,21 @@ class Controller(vkt.Controller):
             load_cases=load_cases,
         )
         
-        model.create_model()
-        model.run_model()
-        
-        # Calculate displacements
-        max_disp_by_type, disp_dict = calculate_displacements(lines_dict, nodes_dict)
+        # Run all SLS combinations and find the critical one
+        critical_result, all_results = model.run_all_combinations()
         
         # Get deformation scale from params
         deform_scale = params.step_3.deform_scale or 25
         
-        # Create the deformed mesh plot
+        # Create the deformed mesh plot with critical combination results
         fig = plot_deformed_mesh(
             nodes=nodes_dict,
             lines=lines_dict,
             members=members,
             cross_sections=cross_sections,
-            disp_dict=disp_dict,
+            disp_dict=critical_result["disp_dict"],
             scale=deform_scale,
+            critical_combination_name=critical_result["combination_name"],
         )
         
         return vkt.PlotlyResult(fig)

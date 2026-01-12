@@ -79,8 +79,19 @@ def plot_deformed_mesh(
     cross_sections: dict[int, dict],
     disp_dict: dict[int, float],
     scale: float = 25,
+    critical_combination_name: str | None = None,
 ) -> go.Figure:
-    """Return a Plotly figure of the scaled deformed shape with meshed elements."""
+    """Return a Plotly figure of the scaled deformed shape with meshed elements.
+    
+    Args:
+        nodes: Dictionary of node data with coordinates.
+        lines: Dictionary of line data with node connectivity.
+        members: Dictionary of member data with cross-section assignments.
+        cross_sections: Dictionary of cross-section properties.
+        disp_dict: Dictionary mapping node IDs to z-displacement values.
+        scale: Scale factor for deformation visualization.
+        critical_combination_name: Name of the critical load combination (optional).
+    """
 
     # ------------------------------------------------------------------ #
     # 1. Deformed node coordinates
@@ -228,11 +239,21 @@ def plot_deformed_mesh(
         )
 
     # ------------------------------------------------------------------ #
-    # 4. Max-displacement box
+    # 4. Max-displacement box with critical combination info
     # ------------------------------------------------------------------ #
     max_abs = max(abs(dmin), abs(dmax))
+    
+    # Build annotation text with critical combination if provided
+    if critical_combination_name:
+        annotation_text = (
+            f"<b>Critical Combination: {critical_combination_name}</b><br>"
+            f"Max Model Deformation |ΔZ|: {max_abs:.3f} mm"
+        )
+    else:
+        annotation_text = f"<b>Max Model Deformation |ΔZ|</b><br>{max_abs:.3f} mm"
+    
     fig.add_annotation(
-        text=f"<b>Max Model Deformation |ΔZ|</b><br>{max_abs:.3f} mm",
+        text=annotation_text,
         xref="paper",
         yref="paper",
         x=0.5,

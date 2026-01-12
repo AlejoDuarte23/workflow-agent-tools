@@ -10,8 +10,11 @@ from app.types import (
     CrossSectionsDict,
     material_dict,
     LoadCase,
+    LoadCombination,
+    CombinationResult,
+    SLS_COMBINATIONS,
 )
-from app.opensees.utils import v_cross, v_sub, v_norm
+from app.opensees.utils import v_cross, v_sub, v_norm, find_critical_combination
 from collections import defaultdict
 from typing import DefaultDict, Annotated
 
@@ -176,16 +179,36 @@ class Model:
                     f"Cross Section name: {self.cross_sections[section_id]["name"]}"
                 )
     
-    def create_loads(self):
-        """Create self weight load and apply all load cases with their factors."""
-        # Add self-weight loads (always applied)
+    def create_loads(self, q_factor: float = 1.0, wl_factor: float = 1.0):
+        """Create self weight load and apply load cases with specified factors.
+        
+        Args:
+            q_factor: Factor for gravitational loads (Q). Default 1.0.
+            wl_factor: Factor for wind loads (WL). Positive = +WL, Negative = -WL.
+        """
+        # Reset loads dict for new combination
+        self.loadsDict = defaultdict(
+            lambda: {"fx": 0.0, "fy": 0.0, "fz": 0.0, "mx": 0.0, "my": 0.0, "mz": 0.0}
+        )
+        
+        # Add self-weight loads (SLS - always applied)
         for nodetag, mass_values in self.mass.items():
             # Mass in opensees is N/g * g to loads (negative z = downward)
             self.loadsDict[nodetag]["fz"] -= mass_values["mass_z"] * self.g
 
-        # Apply all load cases with their factors
+        # Apply load cases with appropriate factors based on their name
         for load_case in self.load_cases:
-            factor = load_case.get("factor", 1.0)
+            case_name = load_case.get("name", "").lower()
+            
+            # Determine the factor to apply based on load case type
+            if "dead" in case_name or "gravity" in case_name or case_name == "q":
+                factor = q_factor
+            elif "wind" in case_name or case_name == "wl":
+                factor = wl_factor
+            else:
+                # For other load cases, use their original factor
+                factor = load_case.get("factor", 1.0)
+            
             for load in load_case["loads"]:
                 node_id = load["node_id"]
                 self.loadsDict[node_id]["fx"] += load["fx"] * factor
@@ -221,10 +244,16 @@ class Model:
         self.assign_support()
         # vfo.plot_model()
 
-    def run_model(self):
+    def run_model(self, q_factor: float = 1.0, wl_factor: float = 1.0):
+        """Run the OpenSees analysis with specified load factors.
+        
+        Args:
+            q_factor: Factor for gravitational loads (Q). Default 1.0.
+            wl_factor: Factor for wind loads (WL). Positive = +WL, Negative = -WL.
+        """
         ops.timeSeries("Linear", 1)
         ops.pattern("Plain", 1, 1)
-        self.create_loads()
+        self.create_loads(q_factor=q_factor, wl_factor=wl_factor)
 
         ops.system('BandGen')
         ops.constraints('Plain')
@@ -235,6 +264,63 @@ class Model:
         ops.analyze(1)
         ops.reactions()
         return ops
+
+    def run_combination(self, combination: LoadCombination) -> CombinationResult:
+        """Run a single load combination and return results.
+        
+        Args:
+            combination: LoadCombination with name, Q_factor, and WL_factor.
+            
+        Returns:
+            CombinationResult with displacements and max absolute displacement.
+        """
+        # Recreate the model (wipe and rebuild)
+        self.create_model()
+        
+        # Run with the combination factors
+        self.run_model(
+            q_factor=combination["Q_factor"],
+            wl_factor=combination["WL_factor"]
+        )
+        
+        # Calculate displacements
+        max_disp_by_type, disp_dict = calculate_displacements(self.lines, self.nodes)
+        
+        # Calculate max absolute displacement
+        max_abs_disp = max(abs(d) for d in disp_dict.values()) if disp_dict else 0.0
+        
+        return {
+            "combination_name": combination["name"],
+            "max_disp_by_type": max_disp_by_type,
+            "disp_dict": disp_dict,
+            "max_abs_displacement": max_abs_disp,
+        }
+
+    def run_all_combinations(
+        self, 
+        combinations: list[LoadCombination] | None = None
+    ) -> tuple[CombinationResult, list[CombinationResult]]:
+        """Run all SLS load combinations and find the critical one.
+        
+        Args:
+            combinations: List of LoadCombination to run. If None, uses SLS_COMBINATIONS.
+            
+        Returns:
+            Tuple of (critical_result, all_results) where critical_result is the 
+            combination with the highest absolute displacement.
+        """
+        if combinations is None:
+            combinations = SLS_COMBINATIONS
+        
+        all_results: list[CombinationResult] = []
+        
+        for combo in combinations:
+            result = self.run_combination(combo)
+            all_results.append(result)
+        
+        critical_result = find_critical_combination(all_results)
+        
+        return critical_result, all_results
 
 
     def __repr__(self) -> str:

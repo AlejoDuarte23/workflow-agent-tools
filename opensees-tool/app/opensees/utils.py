@@ -1,5 +1,6 @@
-from app.types import Vec3, NodesDict
+from app.types import Vec3, NodesDict, LoadCombination, CombinationResult
 import math
+from typing import Callable
 
 
 def v_sub(a: Vec3, b: Vec3) -> Vec3:
@@ -35,3 +36,18 @@ def get_nodes_by_x_and_z(nodes: NodesDict, x: float, z: float, tolerance: float 
         for node_data in nodes.values() 
         if abs(node_data["x"] - x) < tolerance and abs(node_data["z"] - z) < tolerance
     ]
+
+
+def find_critical_combination(results: list[CombinationResult]) -> CombinationResult:
+    """Find the load combination with the highest absolute displacement.
+    
+    Args:
+        results: List of CombinationResult from running all combinations.
+        
+    Returns:
+        The CombinationResult with the maximum absolute displacement.
+    """
+    if not results:
+        raise ValueError("No combination results provided")
+    
+    return max(results, key=lambda r: r["max_abs_displacement"])
