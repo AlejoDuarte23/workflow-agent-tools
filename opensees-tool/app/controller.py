@@ -29,9 +29,6 @@ Select a cross section size for the truss members:""")
     
     step_1.geometry.line_break_2 = vkt.LineBreak()
     
-    step_1.geometry.export_title = vkt.Text("## Export Geometry")
-    step_1.geometry.download_btn = vkt.DownloadButton("Download Truss Geometry (JSON)", method="download_geometry_json")
-    
     # Step 2: Run Model
     step_2 = vkt.Step("Step 2 - Run Model", views=["create_render"])
     step_2.analysis = vkt.Section("OpenSees Analysis")
