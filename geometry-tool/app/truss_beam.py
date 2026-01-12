@@ -1,19 +1,8 @@
 import math
-from typing import Annotated, TypedDict
+from typing import Annotated
 from collections import defaultdict
 
-
-class NodeDict(TypedDict):
-    """Node coordinates in 3D space."""
-    x: float
-    y: float
-    z: float
-
-
-class LineDict(TypedDict):
-    """Line connectivity between two nodes."""
-    NodeI: int
-    NodeJ: int
+from app.types import NodeDict, LineDict
 
 
 class Component:
