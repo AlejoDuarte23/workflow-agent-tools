@@ -3,17 +3,17 @@ from pathlib import Path
 
 import viktor as vkt
 
-from viktor.geometry import Point, Line, RectangularExtrusion
 from app.truss_beam import RectangularTrussBeam
 from app.opensees.model import Model
 from app.types import CrossSectionInfo, NodesInfoDict, LinesInfoDict, MembersDict, CrossSectionsDict, LoadCase, NodalLoad
 from app.plots.deformation import plot_deformed_mesh
 from app.plots.loads import plot_loads_3d, plot_wind_loads_3d
+from app.plots.model3d import plot_model_3d
 
 
 class Parametrization(vkt.Parametrization):
     # Step 1: Geometry
-    step_1 = vkt.Step("Step 1 - Geometry", views=["create_render"])
+    step_1 = vkt.Step("Step 1 - Geometry", views=["show_model"])
     step_1.intro = vkt.Text("""# Rectangular Truss Beam - OpenSees Analysis
 
 Define the truss beam geometry and cross-section parameters below.""")
@@ -61,40 +61,74 @@ This button downloads the results in a JSON file. It gets the results for each c
 class Controller(vkt.Controller):
     parametrization = Parametrization
     
-    @vkt.GeometryView("3D Model", x_axis_to_right=True)
-    def create_render(self, params, **kwargs):
-        """Create 3D visualization of the truss beam."""
-        # Create the truss beam with parameters (convert from mm to m)
+    @vkt.PlotlyView("3D Model", duration_guess=5)
+    def show_model(self, params, **kwargs):
+        """Create 3D visualization of the truss beam using Plotly."""
+        # Load cross-section library
+        cs_library_path = Path(__file__).parent / "cs_library.json"
+        with open(cs_library_path, "r") as f:
+            cs_library: list[CrossSectionInfo] = json.load(f)
+        
+        # Get selected cross-section
+        selected_cs_name = params.step_1.cross_section
+        selected_cs = next((cs for cs in cs_library if cs["name"] == selected_cs_name), None)
+        
+        if selected_cs is None:
+            raise ValueError(f"Cross-section {selected_cs_name} not found in library")
+        
+        # Build the truss beam geometry (in mm for visualization)
         beam = RectangularTrussBeam(
-            length=params.step_1.truss_length / 1000,
-            width=params.step_1.truss_width / 1000,
-            height=params.step_1.truss_height / 1000,
+            length=params.step_1.truss_length,
+            width=params.step_1.truss_width,
+            height=params.step_1.truss_height,
             n_diagonals=int(params.step_1.n_divisions),
         )
-        
-        # Build and clean the model
         nodes, lines = beam.build()
         nodes, lines = beam.clean_model()
         
-        # Create 3D geometry
-        sections_group = []
+        # Convert nodes to NodesInfoDict format (with id field)
+        nodes_dict: NodesInfoDict = {}
+        for node_id, node_data in nodes.items():
+            nodes_dict[node_id] = {
+                "id": node_id,
+                "x": node_data["x"],
+                "y": node_data["y"],
+                "z": node_data["z"],
+            }
         
-        # Parse cross-section size (e.g., "SHS50x4" -> 0.05 meters)
-        cs_size = float(params.step_1.cross_section.replace("SHS", "").split("x")[0]) / 1000
-        
+        # Convert lines to LinesInfoDict format (with Ni, Nj, Type)
+        lines_dict: LinesInfoDict = {}
         for line_id, line_data in lines.items():
-            node_i = nodes[line_data["NodeI"]]
-            node_j = nodes[line_data["NodeJ"]]
-            
-            # Map coordinates: x -> x, y (height) -> y (VIKTOR vertical), z -> z
-            point_i = Point(node_i["x"], node_i["y"], node_i["z"])
-            point_j = Point(node_j["x"], node_j["y"], node_j["z"])
-            
-            line_k = Line(point_i, point_j)
-            section_k = RectangularExtrusion(cs_size, cs_size, line_k, identifier=str(line_id))
-            sections_group.append(section_k)
+            lines_dict[line_id] = {
+                "id": line_id,
+                "Ni": line_data["NodeI"],
+                "Nj": line_data["NodeJ"],
+                "Type": "Truss Chord",
+            }
         
-        return vkt.GeometryResult(geometry=sections_group)
+        # Create cross-sections dict
+        cross_sections: CrossSectionsDict = {
+            selected_cs["id"]: selected_cs
+        }
+        
+        # Create members (assign selected cross-section to all lines)
+        members: MembersDict = {}
+        for line_id in lines_dict.keys():
+            members[line_id] = {
+                "line_id": line_id,
+                "cross_section_id": selected_cs["id"],
+                "material_name": "Steel",
+            }
+        
+        # Create the 3D model visualization plot
+        fig = plot_model_3d(
+            nodes=nodes_dict,
+            lines=lines_dict,
+            members=members,
+            cross_sections=cross_sections,
+        )
+        
+        return vkt.PlotlyResult(fig)
     
     def download_results(self, params, **kwargs):
         """Download JSON file with max displacements from OpenSees analysis."""
