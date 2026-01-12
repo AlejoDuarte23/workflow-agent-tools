@@ -286,8 +286,8 @@ class Model:
         # Calculate displacements
         max_disp_by_type, disp_dict = calculate_displacements(self.lines, self.nodes)
         
-        # Calculate max absolute displacement
-        max_abs_disp = max(abs(d) for d in disp_dict.values()) if disp_dict else 0.0
+        # Calculate max absolute displacement (using dz component)
+        max_abs_disp = max(abs(d["dz"]) for d in disp_dict.values()) if disp_dict else 0.0
         
         return {
             "combination_name": combination["name"],
@@ -335,8 +335,17 @@ class Model:
     
 
 def calculate_displacements(lines:LinesDict, nodes:NodesDict):
+    """Calculate displacements for all nodes in x, y, z directions.
+    
+    Returns:
+        max_disp_by_type: Dict mapping element type to max z-displacement.
+        disp_dict: Dict mapping node ID to displacement dict with dx, dy, dz.
+    """
+    from app.types import DispDict
+    
     disp_by_type: DefaultDict[str, list[float]] = defaultdict(list)
-    disp_dict: dict[int, float] = {}
+    disp_dict: DispDict = {}
+    
     for lineargs in lines.values():
         for node in (lineargs["Ni"], lineargs["Nj"]):
             disp = ops.nodeDisp(node)
@@ -344,15 +353,21 @@ def calculate_displacements(lines:LinesDict, nodes:NodesDict):
             disp_by_type[lineargs["Type"]].append(disp_z)
 
             if node not in disp_dict:
-                disp_dict[node] = disp_z
+                disp_dict[node] = {
+                    "dx": disp[0],
+                    "dy": disp[1],
+                    "dz": disp[2],
+                }
                         
-    max_disp_by_type = {eletype: min(disp_list) for eletype, disp_list in  disp_by_type.items()}   
+    max_disp_by_type = {eletype: min(disp_list) for eletype, disp_list in disp_by_type.items()}   
 
     for node in nodes:
         disp = ops.nodeDisp(node)
-        disp_z = disp[2]
-        disp_dict[node] = disp_z
+        disp_dict[node] = {
+            "dx": disp[0],
+            "dy": disp[1],
+            "dz": disp[2],
+        }
 
-    
     return max_disp_by_type, disp_dict
 

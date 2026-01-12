@@ -131,9 +131,19 @@ SLS_COMBINATIONS: list[LoadCombination] = [
 ]
 
 
+class NodeDisplacement(TypedDict):
+    """Displacement at a node in all 3 directions."""
+    dx: float
+    dy: float
+    dz: float
+
+
+DispDict = dict[int, NodeDisplacement]
+
+
 class CombinationResult(TypedDict):
     """Result from running a load combination analysis."""
     combination_name: str
     max_disp_by_type: dict[str, float]
-    disp_dict: dict[int, float]
+    disp_dict: DispDict
     max_abs_displacement: float
