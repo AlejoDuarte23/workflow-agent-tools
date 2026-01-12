@@ -163,18 +163,10 @@ def plot_loads_3d(
     cross_sections: CrossSectionsDict,
     load: float = 0.0,
 ) -> go.Figure:
-    """Plot members with pastel colours and add red load arrows at nodes where z=0."""
+    """Plot members with blue lines and green spheres, and add red load arrows at nodes where z=0."""
     x_nodes = [n["x"] for n in nodes.values()]
     y_nodes = [n["y"] for n in nodes.values()]
     z_nodes = [n["z"] for n in nodes.values()]
-
-    # --- colour map per cross‑section ----------------------------------------
-    cs_ids = sorted({m["cross_section_id"] for m in members.values()})
-    color_map = {cs_id: PASTEL_PALETTE[i % len(PASTEL_PALETTE)] for i, cs_id in enumerate(cs_ids)}
-    cs_labels = {
-        cs_id: cross_sections[cs_id].get("Description", f"Section {cross_sections[cs_id]['name']}")
-        for cs_id in cs_ids
-    }
 
     fig = go.Figure()
 
@@ -204,23 +196,29 @@ def plot_loads_3d(
         hoverinfo='none'
     ))
 
+    # Draw green spheres for nodes
     fig.add_trace(
         go.Scatter3d(
             x=x_nodes, y=y_nodes, z=z_nodes, mode="markers",
-            marker=dict(size=3, color="black"), hoverinfo="text", showlegend=False,
+            marker=dict(size=6, color="green"), hoverinfo="text", showlegend=False,
         )
     )
 
-    # Draw beam meshes
+    # Draw blue lines for members
     for member in members.values():
         line = lines[member["line_id"]]
         ni, nj = nodes[line["Ni"]], nodes[line["Nj"]]
-        A = np.array([ni["x"], ni["y"], ni["z"]], float)
-        B = np.array([nj["x"], nj["y"], nj["z"]], float)
-        cs = cross_sections[member["cross_section_id"]]
-        width, height = float(cs["h"]), float(cs["h"])
-        verts = compute_beam_vertices_rect(A, B, width, height)
-        add_beam_mesh(fig, verts, color_map[member["cross_section_id"]])
+        fig.add_trace(
+            go.Scatter3d(
+                x=[ni["x"], nj["x"]],
+                y=[ni["y"], nj["y"]],
+                z=[ni["z"], nj["z"]],
+                mode="lines",
+                line=dict(color="blue", width=4),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
 
     # Get nodes where z=0 (in the xy plane) for point loads
     nodes_with_load = [
@@ -246,16 +244,6 @@ def plot_loads_3d(
                 x=cone_verts[:, 0], y=cone_verts[:, 1], z=cone_verts[:, 2],
                 i=qi, j=qj, k=qk, color="red", opacity=1.0, hoverinfo="skip", showlegend=False
             ))
-
-    # Add legend entries for cross-sections
-    for cs_id in cs_ids:
-        fig.add_trace(
-            go.Scatter3d(
-                x=[None], y=[None], z=[None], mode="markers",
-                marker=dict(symbol="square", size=10, color=color_map[cs_id]),
-                name=cs_labels[cs_id], hoverinfo="none", showlegend=True
-            )
-        )
 
     # Add legend entry for loads if present
     if nodes_with_load and load > 0:
@@ -354,18 +342,10 @@ def plot_wind_loads_3d(
     truss_height: float,
     wind_pressure: float = 0.0,
 ) -> go.Figure:
-    """Plot members with pastel colours and add blue wind load arrows at nodes in the ZX plane at y=width."""
+    """Plot members with blue lines and green spheres, and add blue wind load arrows at nodes in the ZX plane at y=0."""
     x_nodes = [n["x"] for n in nodes.values()]
     y_nodes = [n["y"] for n in nodes.values()]
     z_nodes = [n["z"] for n in nodes.values()]
-
-    # --- colour map per cross‑section ----------------------------------------
-    cs_ids = sorted({m["cross_section_id"] for m in members.values()})
-    color_map = {cs_id: PASTEL_PALETTE[i % len(PASTEL_PALETTE)] for i, cs_id in enumerate(cs_ids)}
-    cs_labels = {
-        cs_id: cross_sections[cs_id].get("Description", f"Section {cross_sections[cs_id]['name']}")
-        for cs_id in cs_ids
-    }
 
     fig = go.Figure()
 
@@ -395,23 +375,29 @@ def plot_wind_loads_3d(
         hoverinfo='none'
     ))
 
+    # Draw green spheres for nodes
     fig.add_trace(
         go.Scatter3d(
             x=x_nodes, y=y_nodes, z=z_nodes, mode="markers",
-            marker=dict(size=3, color="black"), hoverinfo="text", showlegend=False,
+            marker=dict(size=6, color="green"), hoverinfo="text", showlegend=False,
         )
     )
 
-    # Draw beam meshes
+    # Draw blue lines for members
     for member in members.values():
         line = lines[member["line_id"]]
         ni, nj = nodes[line["Ni"]], nodes[line["Nj"]]
-        A = np.array([ni["x"], ni["y"], ni["z"]], float)
-        B = np.array([nj["x"], nj["y"], nj["z"]], float)
-        cs = cross_sections[member["cross_section_id"]]
-        width, height = float(cs["h"]), float(cs["h"])
-        verts = compute_beam_vertices_rect(A, B, width, height)
-        add_beam_mesh(fig, verts, color_map[member["cross_section_id"]])
+        fig.add_trace(
+            go.Scatter3d(
+                x=[ni["x"], nj["x"]],
+                y=[ni["y"], nj["y"]],
+                z=[ni["z"], nj["z"]],
+                mode="lines",
+                line=dict(color="blue", width=4),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
 
     # Get nodes in the ZX plane at y=0, where z is between 0 and truss_height
     # These are the nodes on the windward face
@@ -441,16 +427,6 @@ def plot_wind_loads_3d(
                 x=cone_verts[:, 0], y=cone_verts[:, 1], z=cone_verts[:, 2],
                 i=qi, j=qj, k=qk, color="blue", opacity=1.0, hoverinfo="skip", showlegend=False
             ))
-
-    # Add legend entries for cross-sections
-    for cs_id in cs_ids:
-        fig.add_trace(
-            go.Scatter3d(
-                x=[None], y=[None], z=[None], mode="markers",
-                marker=dict(symbol="square", size=10, color=color_map[cs_id]),
-                name=cs_labels[cs_id], hoverinfo="none", showlegend=True
-            )
-        )
 
     # Add legend entry for wind loads if present
     if nodes_with_wind_load and wind_pressure > 0:

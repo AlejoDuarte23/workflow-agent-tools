@@ -3,100 +3,6 @@ import numpy as np
 
 from app.types import NodesInfoDict, LinesInfoDict, MembersDict, CrossSectionsDict
 
-Vec3 = np.ndarray
-
-PASTEL_PALETTE = [
-    "#E416C1",  # Light Pink
-    "#098BF5",  # Baby Blue
-    "#F3083F",  # Cotton Candy
-    "#2704F0",  # Soft Sky Blue
-]
-
-
-def compute_beam_vertices_rect(A: Vec3, B: Vec3, width: float, height: float) -> np.ndarray:
-    v = B - A
-    length = np.linalg.norm(v)
-    if length == 0:
-        raise ValueError("member with zero length")
-    v_hat = v / length
-
-    # pick whichever world‑axis is most perpendicular to v_hat
-    axes = [np.array([1, 0, 0]), np.array([0, 1, 0]), np.array([0, 0, 1])]
-    helper = min(axes, key=lambda ax: abs(np.dot(v_hat, ax)))
-
-    # build a clean 2D frame
-    local_y = np.cross(v_hat, helper)
-    local_y /= np.linalg.norm(local_y)
-    local_z = np.cross(v_hat, local_y)
-    local_z /= np.linalg.norm(local_z)
-
-    local_y *= width / 2.0
-    local_z *= height / 2.0
-
-    # eight corners
-    v0 = A + local_y + local_z
-    v1 = A + local_y - local_z
-    v2 = A - local_y - local_z
-    v3 = A - local_y + local_z
-    v4 = B + local_y + local_z
-    v5 = B + local_y - local_z
-    v6 = B - local_y - local_z
-    v7 = B - local_y + local_z
-    return np.stack([v0, v1, v2, v3, v4, v5, v6, v7])
-
-
-def add_beam_mesh(fig: go.Figure, verts: np.ndarray, color: str) -> None:
-    """Insert one rectangular prism into the figure, drawing both sides of each face."""
-    # define each face by four verts (a,b,c,d)
-    quads = [
-        (0, 1, 2, 3),  # face at A
-        (4, 5, 6, 7),  # face at B
-        (0, 1, 5, 4),
-        (1, 2, 6, 5),
-        (2, 3, 7, 6),
-        (3, 0, 4, 7),
-    ]
-
-    i_list, j_list, k_list = [], [], []
-    for a, b, c, d in quads:
-        # two triangles per quad
-        # 1) a→b→c
-        i_list.append(a)
-        j_list.append(b)
-        k_list.append(c)
-        # 2) a→c→d
-        i_list.append(a)
-        j_list.append(c)
-        k_list.append(d)
-
-        # duplicate them reversed so back faces show
-        # 3) a→c→b
-        i_list.append(a)
-        j_list.append(c)
-        k_list.append(b)
-        # 4) a→d→c
-        i_list.append(a)
-        j_list.append(d)
-        k_list.append(c)
-
-    fig.add_trace(
-        go.Mesh3d(
-            x=verts[:, 0],
-            y=verts[:, 1],
-            z=verts[:, 2],
-            i=i_list,
-            j=j_list,
-            k=k_list,
-            color=color,
-            # draw both sides, disable flat shading to simplify
-            flatshading=False,
-            opacity=1.0,
-            hoverinfo="skip",
-            lighting=dict(ambient=0.5, diffuse=0.7, specular=0.3, roughness=0.9),
-            showscale=False,
-        )
-    )
-
 
 def plot_model_3d(
     nodes: NodesInfoDict,
@@ -104,18 +10,10 @@ def plot_model_3d(
     members: MembersDict,
     cross_sections: CrossSectionsDict,
 ) -> go.Figure:
-    """Plot 3D model of truss beam with pastel colours for each cross-section."""
+    """Plot 3D model of truss beam with blue lines and green spheres for nodes."""
     x_nodes = [n["x"] for n in nodes.values()]
     y_nodes = [n["y"] for n in nodes.values()]
     z_nodes = [n["z"] for n in nodes.values()]
-
-    # --- colour map per cross‑section ----------------------------------------
-    cs_ids = sorted({m["cross_section_id"] for m in members.values()})
-    color_map = {cs_id: PASTEL_PALETTE[i % len(PASTEL_PALETTE)] for i, cs_id in enumerate(cs_ids)}
-    cs_labels = {
-        cs_id: cross_sections[cs_id].get("Description", f"Section {cross_sections[cs_id]['name']}")
-        for cs_id in cs_ids
-    }
 
     fig = go.Figure()
 
@@ -145,31 +43,27 @@ def plot_model_3d(
         hoverinfo='none'
     ))
 
+    # Draw green spheres for nodes
     fig.add_trace(
         go.Scatter3d(
             x=x_nodes, y=y_nodes, z=z_nodes, mode="markers",
-            marker=dict(size=3, color="black"), hoverinfo="text", showlegend=False,
+            marker=dict(size=6, color="green"), hoverinfo="text", showlegend=False,
         )
     )
 
-    # Draw beam meshes
+    # Draw blue lines for members
     for member in members.values():
         line = lines[member["line_id"]]
         ni, nj = nodes[line["Ni"]], nodes[line["Nj"]]
-        A = np.array([ni["x"], ni["y"], ni["z"]], float)
-        B = np.array([nj["x"], nj["y"], nj["z"]], float)
-        cs = cross_sections[member["cross_section_id"]]
-        width, height = float(cs["h"]), float(cs["h"])
-        verts = compute_beam_vertices_rect(A, B, width, height)
-        add_beam_mesh(fig, verts, color_map[member["cross_section_id"]])
-
-    # Add legend entries for cross-sections
-    for cs_id in cs_ids:
         fig.add_trace(
             go.Scatter3d(
-                x=[None], y=[None], z=[None], mode="markers",
-                marker=dict(symbol="square", size=10, color=color_map[cs_id]),
-                name=cs_labels[cs_id], hoverinfo="none", showlegend=True
+                x=[ni["x"], nj["x"]],
+                y=[ni["y"], nj["y"]],
+                z=[ni["z"], nj["z"]],
+                mode="lines",
+                line=dict(color="blue", width=4),
+                hoverinfo="skip",
+                showlegend=False,
             )
         )
 
@@ -184,10 +78,6 @@ def plot_model_3d(
         ),
         paper_bgcolor="white",
         margin=dict(l=0, r=0, t=40, b=0),
-        legend=dict(
-            x=0.95, y=0.05, xanchor="right", yanchor="bottom",
-            bgcolor="rgba(0,0,0,0)", borderwidth=0, itemsizing="constant", font=dict(size=16, color="black")
-        ),
     )
 
     return fig
