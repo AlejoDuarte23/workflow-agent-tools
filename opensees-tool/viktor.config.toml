@@ -1,0 +1,4 @@
+app_type = "simple"
+python_version = "3.12"
+registered_name = "workflow-agent-opensees-tool"
+packages = ["libblas3"]
