@@ -14,57 +14,37 @@ from app.plots.loads import plot_loads_3d, plot_wind_loads_3d
 class Parametrization(vkt.Parametrization):
     # Step 1: Geometry
     step_1 = vkt.Step("Step 1 - Geometry", views=["create_render"])
-    step_1.geometry = vkt.Section("Geometry Definition")
-    step_1.geometry.intro = vkt.Text("""# Rectangular Truss Beam - OpenSees Analysis
+    step_1.intro = vkt.Text("""# Rectangular Truss Beam - OpenSees Analysis
 
 Define the truss beam geometry and cross-section parameters below.""")
-    
-    step_1.geometry.truss_length = vkt.NumberField("Truss Length", min=100, default=10000, suffix="mm")
-    step_1.geometry.truss_width = vkt.NumberField("Truss Width", min=100, default=1000, suffix="mm")
-    step_1.geometry.truss_height = vkt.NumberField("Truss Height", min=100, default=1500, suffix="mm")
-    step_1.geometry.n_divisions = vkt.NumberField("Number of Divisions", min=1, default=6)
-    
-    step_1.geometry.line_break = vkt.LineBreak()
-    
-    step_1.geometry.section_title = vkt.Text("""## Cross-Section
+    step_1.truss_length = vkt.NumberField("Truss Length", min=100, default=10000, suffix="mm")
+    step_1.truss_width = vkt.NumberField("Truss Width", min=100, default=1000, suffix="mm")
+    step_1.truss_height = vkt.NumberField("Truss Height", min=100, default=1500, suffix="mm")
+    step_1.n_divisions = vkt.NumberField("Number of Divisions", min=1, default=6)
+    step_1.section_title = vkt.Text("""## Cross-Section
 Select a cross section size for the truss members:""")
-    step_1.geometry.cross_section = vkt.OptionField(
+    step_1.cross_section = vkt.OptionField(
         "Cross-Section Size", 
         options=["SHS50x4", "SHS75x4", "SHS100x4", "SHS150x4"], 
         default="SHS50x4"
     )
     
-    step_1.geometry.line_break_2 = vkt.LineBreak()
-    
-    # Step 2: Gravitational Loads
-    step_2 = vkt.Step("Step 2 - Gravitational Loads", views=["create_render", "show_loads"])
-    step_2.loads = vkt.Section("Gravitational Loads")
-    step_2.loads.intro = vkt.Text("""# Gravitational Loads
-
+    # Step 2: Loads (Gravitational + Wind)
+    step_2 = vkt.Step("Step 2 - Loads", views=["show_loads", "show_wind_loads"])
+    step_2.gravity_intro = vkt.Text("""# Gravitational Loads
 Define the gravitational load to apply to the truss beam. The load will be visualized as point loads at all nodes in the XY plane (z=0).""")
-    
-    step_2.loads.load_q = vkt.NumberField("Load Q", min=0, default=5, suffix="kPa")
+    step_2.load_q = vkt.NumberField("Load Q", min=0, default=5, suffix="kPa")
+    step_2.wind_intro = vkt.Text("""# Wind Loads
+Define the wind pressure to apply to the truss beam. The load will be visualized as point loads at nodes on the windward face (ZX plane at y=width, where z is between 0 and the truss height). Wind direction is in the positive Y direction.""")
+    step_2.wind_pressure = vkt.NumberField("Wind Pressure", min=0, default=1, suffix="kPa")
 
-    # Step 3: Wind Loads
-    step_3 = vkt.Step("Step 3 - Wind Loads", views=["create_render", "show_wind_loads"])
-    step_3.wind = vkt.Section("Wind Loads")
-    step_3.wind.intro = vkt.Text("""# Wind Loads
-
-Define the wind pressure to apply to the truss beam. The load will be visualized as point loads at nodes on the windward face (ZX plane at y=0, where z is between 0 and the truss height). Wind direction is in the positive Y direction.""")
-    
-    step_3.wind.wind_pressure = vkt.NumberField("Wind Pressure", min=0, default=1, suffix="kPa")
-
-    # Step 4: Run Model
-    step_4 = vkt.Step("Step 4 - Run Model", views=["create_render", "show_deformation"])
-    step_4.analysis = vkt.Section("OpenSees Analysis")
-    step_4.analysis.intro = vkt.Text("""# Run OpenSees Analysis
-
+    # Step 3: Run Model
+    step_3 = vkt.Step("Step 3 - Run Model", views=["show_deformation"])
+    step_3.intro = vkt.Text("""# Run OpenSees Analysis
 Run the structural analysis using OpenSees. The model will be generated based on the geometry defined in Step 1.""")
-    
-    step_4.analysis.run_btn = vkt.ActionButton("Run OpenSees Model", method="run_opensees_model")
-    
-    step_4.results = vkt.Section("Deformation Settings")
-    step_4.results.deform_scale = vkt.NumberField("Deformation Scale", min=1, max=500, default=25, step=1)
+    step_3.run_btn = vkt.ActionButton("Run OpenSees Model", method="run_opensees_model")
+    step_3.br1 = vkt.LineBreak()
+    step_3.deform_scale = vkt.NumberField("Deformation Scale", min=1, max=500, default=25, step=1)
 
 
 class Controller(vkt.Controller):
@@ -75,10 +55,10 @@ class Controller(vkt.Controller):
         """Create 3D visualization of the truss beam."""
         # Create the truss beam with parameters (convert from mm to m)
         beam = RectangularTrussBeam(
-            length=params.step_1.geometry.truss_length / 1000,
-            width=params.step_1.geometry.truss_width / 1000,
-            height=params.step_1.geometry.truss_height / 1000,
-            n_diagonals=int(params.step_1.geometry.n_divisions),
+            length=params.step_1.truss_length / 1000,
+            width=params.step_1.truss_width / 1000,
+            height=params.step_1.truss_height / 1000,
+            n_diagonals=int(params.step_1.n_divisions),
         )
         
         # Build and clean the model
@@ -89,7 +69,7 @@ class Controller(vkt.Controller):
         sections_group = []
         
         # Parse cross-section size (e.g., "SHS50x4" -> 0.05 meters)
-        cs_size = float(params.step_1.geometry.cross_section.replace("SHS", "").split("x")[0]) / 1000
+        cs_size = float(params.step_1.cross_section.replace("SHS", "").split("x")[0]) / 1000
         
         for line_id, line_data in lines.items():
             node_i = nodes[line_data["NodeI"]]
@@ -113,7 +93,7 @@ class Controller(vkt.Controller):
             cs_library: list[CrossSectionInfo] = json.load(f)
         
         # Get selected cross-section
-        selected_cs_name = params.step_1.geometry.cross_section
+        selected_cs_name = params.step_1.cross_section
         selected_cs = next((cs for cs in cs_library if cs["name"] == selected_cs_name), None)
         
         if selected_cs is None:
@@ -121,10 +101,10 @@ class Controller(vkt.Controller):
         
         # Build the truss beam geometry (in mm for OpenSees)
         beam = RectangularTrussBeam(
-            length=params.step_1.geometry.truss_length,
-            width=params.step_1.geometry.truss_width,
-            height=params.step_1.geometry.truss_height,
-            n_diagonals=int(params.step_1.geometry.n_divisions),
+            length=params.step_1.truss_length,
+            width=params.step_1.truss_width,
+            height=params.step_1.truss_height,
+            n_diagonals=int(params.step_1.n_divisions),
         )
         nodes, lines = beam.build()
         nodes, lines = beam.clean_model()
@@ -165,16 +145,16 @@ class Controller(vkt.Controller):
         
         # Identify support nodes: z=0 AND (x=0 OR x=length)
         from app.opensees.utils import get_nodes_by_x_and_z
-        length = params.step_1.geometry.truss_length
-        width = params.step_1.geometry.truss_width
-        height = params.step_1.geometry.truss_height
+        length = params.step_1.truss_length
+        width = params.step_1.truss_width
+        height = params.step_1.truss_height
         support_nodes_start = get_nodes_by_x_and_z(nodes_dict, x=0, z=0)
         support_nodes_end = get_nodes_by_x_and_z(nodes_dict, x=length, z=0)
         support_nodes = support_nodes_start + support_nodes_end
         
         # Get load values from params
-        load_q = params.step_2.loads.load_q or 0.0  # kPa
-        wind_pressure = params.step_3.wind.wind_pressure or 0.0  # kPa
+        load_q = params.step_2.load_q or 0.0  # kPa
+        wind_pressure = params.step_2.wind_pressure or 0.0  # kPa
         
         # Create load cases
         load_cases: list[LoadCase] = []
@@ -191,7 +171,7 @@ class Controller(vkt.Controller):
                 if abs(node_data["z"]) < 1e-6
             ]
             # Calculate tributary length per node (approximate: length / (n_divisions + 1))
-            n_divisions = int(params.step_1.geometry.n_divisions)
+            n_divisions = int(params.step_1.n_divisions)
             trib_length = length / (n_divisions + 1)  # mm
             trib_width = width  # mm (full width)
             trib_area = trib_length * trib_width  # mm²
@@ -228,7 +208,7 @@ class Controller(vkt.Controller):
                     node_data["z"] <= height + 1e-6)
             ]
             # Calculate tributary area for wind (height x tributary length)
-            n_divisions = int(params.step_1.geometry.n_divisions)
+            n_divisions = int(params.step_1.n_divisions)
             trib_length = length / (n_divisions + 1)  # mm
             trib_height = height  # mm
             trib_area_wind = trib_length * trib_height  # mm²
@@ -293,7 +273,7 @@ class Controller(vkt.Controller):
             cs_library: list[CrossSectionInfo] = json.load(f)
         
         # Get selected cross-section
-        selected_cs_name = params.step_1.geometry.cross_section
+        selected_cs_name = params.step_1.cross_section
         selected_cs = next((cs for cs in cs_library if cs["name"] == selected_cs_name), None)
         
         if selected_cs is None:
@@ -301,10 +281,10 @@ class Controller(vkt.Controller):
         
         # Build the truss beam geometry (in mm for OpenSees)
         beam = RectangularTrussBeam(
-            length=params.step_1.geometry.truss_length,
-            width=params.step_1.geometry.truss_width,
-            height=params.step_1.geometry.truss_height,
-            n_diagonals=int(params.step_1.geometry.n_divisions),
+            length=params.step_1.truss_length,
+            width=params.step_1.truss_width,
+            height=params.step_1.truss_height,
+            n_diagonals=int(params.step_1.n_divisions),
         )
         nodes, lines = beam.build()
         nodes, lines = beam.clean_model()
@@ -345,16 +325,16 @@ class Controller(vkt.Controller):
         
         # Identify support nodes: z=0 AND (x=0 OR x=length)
         from app.opensees.utils import get_nodes_by_x_and_z
-        length = params.step_1.geometry.truss_length
-        width = params.step_1.geometry.truss_width
-        height = params.step_1.geometry.truss_height
+        length = params.step_1.truss_length
+        width = params.step_1.truss_width
+        height = params.step_1.truss_height
         support_nodes_start = get_nodes_by_x_and_z(nodes_dict, x=0, z=0)
         support_nodes_end = get_nodes_by_x_and_z(nodes_dict, x=length, z=0)
         support_nodes = support_nodes_start + support_nodes_end
         
         # Get load values from params
-        load_q = params.step_2.loads.load_q or 0.0  # kPa
-        wind_pressure = params.step_3.wind.wind_pressure or 0.0  # kPa
+        load_q = params.step_2.load_q or 0.0  # kPa
+        wind_pressure = params.step_2.wind_pressure or 0.0  # kPa
         
         # Create load cases (same logic as run_opensees_model)
         load_cases: list[LoadCase] = []
@@ -365,7 +345,7 @@ class Controller(vkt.Controller):
                 node_id for node_id, node_data in nodes_dict.items()
                 if abs(node_data["z"]) < 1e-6
             ]
-            n_divisions = int(params.step_1.geometry.n_divisions)
+            n_divisions = int(params.step_1.n_divisions)
             trib_length = length / (n_divisions + 1)
             trib_area = trib_length * width
             pressure_n_mm2 = load_q * 0.001
@@ -387,7 +367,7 @@ class Controller(vkt.Controller):
                     node_data["z"] >= -1e-6 and
                     node_data["z"] <= height + 1e-6)
             ]
-            n_divisions = int(params.step_1.geometry.n_divisions)
+            n_divisions = int(params.step_1.n_divisions)
             trib_length = length / (n_divisions + 1)
             trib_area_wind = trib_length * height
             pressure_n_mm2 = wind_pressure * 0.001
@@ -418,7 +398,7 @@ class Controller(vkt.Controller):
         max_disp_by_type, disp_dict = calculate_displacements(lines_dict, nodes_dict)
         
         # Get deformation scale from params
-        deform_scale = params.step_4.results.deform_scale or 25
+        deform_scale = params.step_3.deform_scale or 25
         
         # Create the deformed mesh plot
         fig = plot_deformed_mesh(
@@ -441,7 +421,7 @@ class Controller(vkt.Controller):
             cs_library: list[CrossSectionInfo] = json.load(f)
         
         # Get selected cross-section
-        selected_cs_name = params.step_1.geometry.cross_section
+        selected_cs_name = params.step_1.cross_section
         selected_cs = next((cs for cs in cs_library if cs["name"] == selected_cs_name), None)
         
         if selected_cs is None:
@@ -449,10 +429,10 @@ class Controller(vkt.Controller):
         
         # Build the truss beam geometry (in mm for visualization)
         beam = RectangularTrussBeam(
-            length=params.step_1.geometry.truss_length,
-            width=params.step_1.geometry.truss_width,
-            height=params.step_1.geometry.truss_height,
-            n_diagonals=int(params.step_1.geometry.n_divisions),
+            length=params.step_1.truss_length,
+            width=params.step_1.truss_width,
+            height=params.step_1.truss_height,
+            n_diagonals=int(params.step_1.n_divisions),
         )
         nodes, lines = beam.build()
         nodes, lines = beam.clean_model()
@@ -492,7 +472,7 @@ class Controller(vkt.Controller):
             }
         
         # Get load value from params
-        load_q = params.step_2.loads.load_q or 0.0
+        load_q = params.step_2.load_q or 0.0
         
         # Create the loads visualization plot
         fig = plot_loads_3d(
@@ -514,7 +494,7 @@ class Controller(vkt.Controller):
             cs_library: list[CrossSectionInfo] = json.load(f)
         
         # Get selected cross-section
-        selected_cs_name = params.step_1.geometry.cross_section
+        selected_cs_name = params.step_1.cross_section
         selected_cs = next((cs for cs in cs_library if cs["name"] == selected_cs_name), None)
         
         if selected_cs is None:
@@ -522,10 +502,10 @@ class Controller(vkt.Controller):
         
         # Build the truss beam geometry (in mm for visualization)
         beam = RectangularTrussBeam(
-            length=params.step_1.geometry.truss_length,
-            width=params.step_1.geometry.truss_width,
-            height=params.step_1.geometry.truss_height,
-            n_diagonals=int(params.step_1.geometry.n_divisions),
+            length=params.step_1.truss_length,
+            width=params.step_1.truss_width,
+            height=params.step_1.truss_height,
+            n_diagonals=int(params.step_1.n_divisions),
         )
         nodes, lines = beam.build()
         nodes, lines = beam.clean_model()
@@ -565,9 +545,9 @@ class Controller(vkt.Controller):
             }
         
         # Get wind pressure from params
-        wind_pressure = params.step_3.wind.wind_pressure or 0.0
-        truss_width = params.step_1.geometry.truss_width
-        truss_height = params.step_1.geometry.truss_height
+        wind_pressure = params.step_2.wind_pressure or 0.0
+        truss_width = params.step_1.truss_width
+        truss_height = params.step_1.truss_height
         
         # Create the wind loads visualization plot
         fig = plot_wind_loads_3d(
