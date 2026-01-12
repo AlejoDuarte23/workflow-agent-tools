@@ -1,7 +1,12 @@
+import json
+from pathlib import Path
+
 import viktor as vkt
 
 from viktor.geometry import Point, Line, RectangularExtrusion
 from app.truss_beam import RectangularTrussBeam
+from app.opensees.model import Model, calculate_displacements
+from app.types import CrossSectionInfo, NodesInfoDict, LinesInfoDict, MembersDict, CrossSectionsDict
 
 
 class Parametrization(vkt.Parametrization):
@@ -78,9 +83,86 @@ class Controller(vkt.Controller):
         return vkt.GeometryResult(geometry=sections_group)
     
     def run_opensees_model(self, params, **kwargs):
-        """Run the OpenSees analysis model.
+        """Run the OpenSees analysis model."""
+        # Load cross-section library
+        cs_library_path = Path(__file__).parent / "cs_library.json"
+        with open(cs_library_path, "r") as f:
+            cs_library: list[CrossSectionInfo] = json.load(f)
         
-        This method will be implemented to run the structural analysis.
-        """
-        # TODO: Implement OpenSees model execution logic
-        pass
+        # Get selected cross-section
+        selected_cs_name = params.step_1.geometry.cross_section
+        selected_cs = next((cs for cs in cs_library if cs["name"] == selected_cs_name), None)
+        
+        if selected_cs is None:
+            raise ValueError(f"Cross-section {selected_cs_name} not found in library")
+        
+        # Build the truss beam geometry (in mm for OpenSees)
+        beam = RectangularTrussBeam(
+            length=params.step_1.geometry.truss_length,
+            width=params.step_1.geometry.truss_width,
+            height=params.step_1.geometry.truss_height,
+            n_diagonals=int(params.step_1.geometry.n_divisions),
+        )
+        nodes, lines = beam.build()
+        nodes, lines = beam.clean_model()
+        
+        # Convert nodes to NodesInfoDict format (with id field)
+        nodes_dict: NodesInfoDict = {}
+        for node_id, node_data in nodes.items():
+            nodes_dict[node_id] = {
+                "id": node_id,
+                "x": node_data["x"],
+                "y": node_data["y"],
+                "z": node_data["z"],
+            }
+        
+        # Convert lines to LinesInfoDict format (with Ni, Nj, Type)
+        lines_dict: LinesInfoDict = {}
+        for line_id, line_data in lines.items():
+            lines_dict[line_id] = {
+                "id": line_id,
+                "Ni": line_data["NodeI"],
+                "Nj": line_data["NodeJ"],
+                "Type": "Truss Chord",
+            }
+        
+        # Create cross-sections dict
+        cross_sections: CrossSectionsDict = {
+            selected_cs["id"]: selected_cs
+        }
+        
+        # Create members (assign selected cross-section to all lines)
+        members: MembersDict = {}
+        for line_id in lines_dict.keys():
+            members[line_id] = {
+                "line_id": line_id,
+                "cross_section_id": selected_cs["id"],
+                "material_name": "Steel",
+            }
+        
+        # Create and run the OpenSees model
+        model = Model(
+            nodes=nodes_dict,
+            lines=lines_dict,
+            cross_sections=cross_sections,
+            members=members,
+        )
+        
+        model.create_model()
+        model.run_model()
+        
+        # Calculate and print displacements
+        max_disp_by_type, disp_dict = calculate_displacements(lines_dict, nodes_dict)
+        
+        print(f"\n{'='*50}")
+        print("OpenSees Analysis Results")
+        print(f"Cross-Section: {selected_cs_name}")
+        print(f"{'='*50}")
+        print("\nMax Displacement by Element Type:")
+        for elem_type, disp in max_disp_by_type.items():
+            print(f"  {elem_type}: {disp:.4f} mm")
+        print(f"\nMin Displacement (all nodes): {min(disp_dict.values()):.4f} mm")
+        print(f"Max Displacement (all nodes): {max(disp_dict.values()):.4f} mm")
+        print(f"{'='*50}\n")
+        
+        return None
