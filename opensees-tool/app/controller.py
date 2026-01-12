@@ -1,4 +1,3 @@
-import json
 import viktor as vkt
 
 from viktor.geometry import Point, Line, RectangularExtrusion

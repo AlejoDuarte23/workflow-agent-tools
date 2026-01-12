@@ -1,7 +1,6 @@
 from typing import TypedDict, Annotated, Literal, Union
 
 
-# Geometry Types (used for truss beam generation)
 class NodeDict(TypedDict):
     """Node coordinates in 3D space."""
     x: float
@@ -15,7 +14,6 @@ class LineDict(TypedDict):
     NodeJ: int
 
 
-# Analysis Types (for OpenSees integration)
 class NodeInfo(TypedDict):
     id: int
     x: float
