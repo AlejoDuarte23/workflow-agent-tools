@@ -53,10 +53,10 @@ The analysis runs 7 SLS load combinations and identifies the critical one:
 - SLS - WL
 
 Where **SLS** = Self-weight, **Q** = Gravitational load, **WL** = Wind load.""")
-    step_3.run_btn = vkt.ActionButton("Run OpenSees Model", method="run_opensees_model")
-    step_3.br1 = vkt.LineBreak()
     step_3.deform_scale = vkt.NumberField("Deformation Scale", min=1, max=500, default=25, step=1)
-
+    step_3.download_text = vkt.Text("""## Download Results
+This button downloads the results in a JSON file. It gets the results for each combination along the model parameters""")
+    step_3.download_btn = vkt.DownloadButton("Download Results", method="download_results")
 
 class Controller(vkt.Controller):
     parametrization = Parametrization
@@ -96,8 +96,8 @@ class Controller(vkt.Controller):
         
         return vkt.GeometryResult(geometry=sections_group)
     
-    def run_opensees_model(self, params, **kwargs):
-        """Run the OpenSees analysis model."""
+    def download_results(self, params, **kwargs):
+        """Download JSON file with max displacements from OpenSees analysis."""
         # Load cross-section library
         cs_library_path = Path(__file__).parent / "cs_library.json"
         with open(cs_library_path, "r") as f:
@@ -258,25 +258,42 @@ class Controller(vkt.Controller):
         # Run all SLS combinations and find the critical one
         critical_result, all_results = model.run_all_combinations()
         
-        print(f"\n{'='*60}")
-        print("OpenSees Analysis Results - All Load Combinations")
-        print(f"Cross-Section: {selected_cs_name}")
-        print(f"Load Cases Defined: {[lc['name'] for lc in load_cases]}")
-        print(f"{'='*60}")
-        print("\nAll Combinations Results:")
-        print(f"{'-'*60}")
-        for result in all_results:
-            max_abs = result['max_abs_displacement']
-            print(f"  {result['combination_name']:<25}: Max |ΔZ| = {max_abs:.4f} mm")
-        print(f"{'-'*60}")
-        print(f"\n*** CRITICAL COMBINATION: {critical_result['combination_name']} ***")
-        print(f"    Max Absolute Displacement: {critical_result['max_abs_displacement']:.4f} mm")
-        print("\nMax Displacement by Element Type (Critical Combination):")
-        for elem_type, disp in critical_result['max_disp_by_type'].items():
-            print(f"  {elem_type}: {disp:.4f} mm")
-        print(f"{'='*60}\n")
+        # Calculate max displacements in x, y, z from the critical combination
+        disp_dict = critical_result["disp_dict"]
+        max_dx = max(abs(d["dx"]) for d in disp_dict.values()) if disp_dict else 0.0
+        max_dy = max(abs(d["dy"]) for d in disp_dict.values()) if disp_dict else 0.0
+        max_dz = max(abs(d["dz"]) for d in disp_dict.values()) if disp_dict else 0.0
         
-        return None
+        # Create JSON result with max displacements and critical combination info
+        result_data = {
+            "critical_combination": critical_result["combination_name"],
+            "max_displacements_mm": {
+                "dx": round(max_dx, 4),
+                "dy": round(max_dy, 4),
+                "dz": round(max_dz, 4),
+            },
+            "model_parameters": {
+                "truss_length_mm": params.step_1.truss_length,
+                "truss_width_mm": params.step_1.truss_width,
+                "truss_height_mm": params.step_1.truss_height,
+                "n_divisions": int(params.step_1.n_divisions),
+                "cross_section": selected_cs_name,
+                "load_q_kPa": load_q,
+                "wind_pressure_kPa": wind_pressure,
+            },
+            "all_combinations_results": [
+                {
+                    "combination_name": r["combination_name"],
+                    "max_abs_displacement_mm": round(r["max_abs_displacement"], 4),
+                }
+                for r in all_results
+            ],
+        }
+        
+        # Convert to JSON string
+        json_content = json.dumps(result_data, indent=2)
+        
+        return vkt.DownloadResult(json_content, "opensees_results.json")
 
     @vkt.PlotlyView("Deformed Shape", duration_guess=5)
     def show_deformation(self, params, **kwargs):
