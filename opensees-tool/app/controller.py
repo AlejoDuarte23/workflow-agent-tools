@@ -8,6 +8,7 @@ from app.truss_beam import RectangularTrussBeam
 from app.opensees.model import Model, calculate_displacements
 from app.types import CrossSectionInfo, NodesInfoDict, LinesInfoDict, MembersDict, CrossSectionsDict
 from app.plots.deformation import plot_deformed_mesh
+from app.plots.loads import plot_loads_3d
 
 
 class Parametrization(vkt.Parametrization):
@@ -46,6 +47,15 @@ Run the structural analysis using OpenSees. The model will be generated based on
     
     step_2.results = vkt.Section("Deformation Settings")
     step_2.results.deform_scale = vkt.NumberField("Deformation Scale", min=1, max=500, default=25, step=1)
+
+    # Step 3: Gravitational Loads
+    step_3 = vkt.Step("Step 3 - Gravitational Loads", views=["create_render", "show_loads"])
+    step_3.loads = vkt.Section("Gravitational Loads")
+    step_3.loads.intro = vkt.Text("""# Gravitational Loads
+
+Define the gravitational load to apply to the truss beam. The load will be visualized as point loads at all nodes in the XY plane (z=0).""")
+    
+    step_3.loads.load_q = vkt.NumberField("Load Q", min=0, default=5, suffix="kPa")
 
 
 class Controller(vkt.Controller):
@@ -271,6 +281,79 @@ class Controller(vkt.Controller):
             cross_sections=cross_sections,
             disp_dict=disp_dict,
             scale=deform_scale,
+        )
+        
+        return vkt.PlotlyResult(fig)
+
+    @vkt.PlotlyView("Loads Visualization", duration_guess=5)
+    def show_loads(self, params, **kwargs):
+        """Display the 3D model with gravitational point loads at z=0 nodes."""
+        # Load cross-section library
+        cs_library_path = Path(__file__).parent / "cs_library.json"
+        with open(cs_library_path, "r") as f:
+            cs_library: list[CrossSectionInfo] = json.load(f)
+        
+        # Get selected cross-section
+        selected_cs_name = params.step_1.geometry.cross_section
+        selected_cs = next((cs for cs in cs_library if cs["name"] == selected_cs_name), None)
+        
+        if selected_cs is None:
+            raise ValueError(f"Cross-section {selected_cs_name} not found in library")
+        
+        # Build the truss beam geometry (in mm for visualization)
+        beam = RectangularTrussBeam(
+            length=params.step_1.geometry.truss_length,
+            width=params.step_1.geometry.truss_width,
+            height=params.step_1.geometry.truss_height,
+            n_diagonals=int(params.step_1.geometry.n_divisions),
+        )
+        nodes, lines = beam.build()
+        nodes, lines = beam.clean_model()
+        
+        # Convert nodes to NodesInfoDict format (with id field)
+        nodes_dict: NodesInfoDict = {}
+        for node_id, node_data in nodes.items():
+            nodes_dict[node_id] = {
+                "id": node_id,
+                "x": node_data["x"],
+                "y": node_data["y"],
+                "z": node_data["z"],
+            }
+        
+        # Convert lines to LinesInfoDict format (with Ni, Nj, Type)
+        lines_dict: LinesInfoDict = {}
+        for line_id, line_data in lines.items():
+            lines_dict[line_id] = {
+                "id": line_id,
+                "Ni": line_data["NodeI"],
+                "Nj": line_data["NodeJ"],
+                "Type": "Truss Chord",
+            }
+        
+        # Create cross-sections dict
+        cross_sections: CrossSectionsDict = {
+            selected_cs["id"]: selected_cs
+        }
+        
+        # Create members (assign selected cross-section to all lines)
+        members: MembersDict = {}
+        for line_id in lines_dict.keys():
+            members[line_id] = {
+                "line_id": line_id,
+                "cross_section_id": selected_cs["id"],
+                "material_name": "Steel",
+            }
+        
+        # Get load value from params
+        load_q = params.step_3.loads.load_q or 0.0
+        
+        # Create the loads visualization plot
+        fig = plot_loads_3d(
+            nodes=nodes_dict,
+            lines=lines_dict,
+            members=members,
+            cross_sections=cross_sections,
+            load=load_q,
         )
         
         return vkt.PlotlyResult(fig)
