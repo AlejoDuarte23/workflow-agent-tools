@@ -25,8 +25,8 @@ class RectangularTrussBeam(Component):
     def __init__(
         self,
         length: Annotated[float, "Length of the beam along the X-axis (m)"],
-        width: Annotated[float, "Width of the beam along the Z-axis (m)"],
-        height: Annotated[float, "Height of the beam along the Y-axis (m)"],
+        width: Annotated[float, "Width of the beam along the Y-axis (m)"],
+        height: Annotated[float, "Height of the beam along the Z-axis (m)"],
         n_diagonals: Annotated[int, "Number of diagonal sections along the beam"],
     ):
         """Create a rectangular truss beam starting at origin (0, 0, 0)."""
@@ -106,12 +106,12 @@ class RectangularTrussBeam(Component):
         # Create four chords at corners of the rectangular cross-section
         # Bottom-left chord (y=0, z=0)
         chord_bl = self.create_chord_nodes(yo=0, zo=0)
-        # Bottom-right chord (y=0, z=width)
-        chord_br = self.create_chord_nodes(yo=0, zo=self.width)
-        # Top-left chord (y=height, z=0)
-        chord_tl = self.create_chord_nodes(yo=self.height, zo=0)
-        # Top-right chord (y=height, z=width)
-        chord_tr = self.create_chord_nodes(yo=self.height, zo=self.width)
+        # Bottom-right chord (y=width, z=0)
+        chord_br = self.create_chord_nodes(yo=self.width, zo=0)
+        # Top-left chord (y=0, z=height)
+        chord_tl = self.create_chord_nodes(yo=0, zo=self.height)
+        # Top-right chord (y=width, z=height)
+        chord_tr = self.create_chord_nodes(yo=self.width, zo=self.height)
 
         # Get node IDs for each chord
         chord_bl_ids = list(chord_bl.keys())
