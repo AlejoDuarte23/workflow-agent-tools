@@ -61,21 +61,6 @@ class Controller(vkt.Controller):
                 "n_divisions": int(params.n_divisions),
                 "cross_section_mm": cs_size_mm
             },
-            "nodes": {
-                str(node_id): {
-                    "x": round(node_data["x"] * 1000, 3),
-                    "y": round(node_data["y"] * 1000, 3),
-                    "z": round(node_data["z"] * 1000, 3)
-                }
-                for node_id, node_data in nodes.items()
-            },
-            "lines": {
-                str(line_id): {
-                    "NodeI": line_data["NodeI"],
-                    "NodeJ": line_data["NodeJ"]
-                }
-                for line_id, line_data in lines.items()
-            },
             "metadata": {
                 "total_nodes": len(nodes),
                 "total_lines": len(lines),
@@ -127,3 +112,52 @@ class Controller(vkt.Controller):
             sections_group.append(section_k)
         
         return vkt.GeometryResult(geometry=sections_group)
+
+    @vkt.DataView("Truss Information")
+    def visualize_data(self, params, **kwargs):
+        """Display truss geometry information and statistics."""
+        # Convert from mm to m for beam calculation
+        beam = RectangularTrussBeam(
+            length=params.truss_length / 1000,
+            width=params.truss_width / 1000,
+            height=params.truss_height / 1000,
+            n_diagonals=int(params.n_divisions),
+        )
+        
+        # Build and clean the model
+        nodes, lines = beam.build()
+        nodes, lines = beam.clean_model()
+        
+        # Parse cross-section size
+        cs_size_mm = float(params.cross_section.replace("SHS", "").split("x")[0])
+        
+        # Calculate total member length
+        total_length = 0
+        for line_id, line_data in lines.items():
+            node_i = nodes[line_data["NodeI"]]
+            node_j = nodes[line_data["NodeJ"]]
+            length = ((node_j["x"] - node_i["x"])**2 + 
+                     (node_j["y"] - node_i["y"])**2 + 
+                     (node_j["z"] - node_i["z"])**2)**0.5
+            total_length += length
+        
+        # Create data structure
+        data = vkt.DataGroup(
+            geometry_params=vkt.DataItem('Geometry Parameters', '', subgroup=vkt.DataGroup(
+                length=vkt.DataItem('Length', params.truss_length, suffix='mm'),
+                width=vkt.DataItem('Width', params.truss_width, suffix='mm'),
+                height=vkt.DataItem('Height', params.truss_height, suffix='mm'),
+                divisions=vkt.DataItem('Number of Divisions', int(params.n_divisions))
+            )),
+            model_stats=vkt.DataItem('Model Statistics', '', subgroup=vkt.DataGroup(
+                nodes=vkt.DataItem('Total Nodes', len(nodes)),
+                members=vkt.DataItem('Total Members', len(lines)),
+                total_length=vkt.DataItem('Total Member Length', round(total_length * 1000, 2), suffix='mm')
+            )),
+            cross_section=vkt.DataItem('Cross-Section', '', subgroup=vkt.DataGroup(
+                type=vkt.DataItem('Type', params.cross_section),
+                size=vkt.DataItem('Size', cs_size_mm, suffix='mm')
+            ))
+        )
+        
+        return vkt.DataResult(data)
