@@ -2,9 +2,40 @@ import math
 import json
 
 import viktor as vkt
-from viktor.geometry import Point, Line, RectangularExtrusion, Polygon, Material, Cone, Group, Vector
+from viktor.geometry import Point, Line, RectangularExtrusion, Polygon, Material, Cone, Group, Vector, SquareBeam
 from viktor.views import Label
 from app.truss_beam import RectangularTrussBeam
+
+
+def notched_profile(width=2000.0, height=2400.0, notch=400.0) -> list[vkt.Point]:
+    """
+    Profile is defined in the local XY plane (z=0).
+    This outline is a width x height rectangle with a notch (notch x notch)
+    removed at the top-right corner.
+
+    Clockwise + closed (first point repeated at the end) as required by Extrusion.
+    """
+    w = float(width)
+    h = float(height)
+    n = float(notch)
+
+    # Center the profile around the local origin (0, 0) so the extrusion line passes through the center
+    xL, xR = -w / 2, w / 2
+    yB, yT = -h / 2, h / 2
+
+    xN = xR - n      # notch inner x
+    yN = yT - n      # notch bottom y
+
+    # Clockwise loop
+    return [
+        vkt.Point(xL, yB),
+        vkt.Point(xL, yT),
+        vkt.Point(xN, yT),
+        vkt.Point(xN, yN),
+        vkt.Point(xR, yN),
+        vkt.Point(xR, yB),
+        vkt.Point(xL, yB),
+    ]
 
 
 def create_load_arrow(origin: Point, arrow_length: float, material=None) -> Group:
@@ -222,17 +253,17 @@ Enter the site location and elevation information""")
 
     # Structure Data (mm)
     text_4 = vkt.Text("""## Structure Data
-Define the truss geometry and member sizing (metric)""")
-    truss_length = vkt.NumberField("Truss Length, L", min=100, default=10000, suffix="mm")
-    truss_width = vkt.NumberField("Truss Width, B", min=100, default=1000, suffix="mm")
-    truss_height = vkt.NumberField("Truss Height, H", min=100, default=1500, suffix="mm")
+Define the bridge geometry and member sizing (metric)""")
+    bridge_length = vkt.NumberField("Bridge Length, L", min=100, default=20000, suffix="mm")
+    bridge_width = vkt.NumberField("Bridge Width, B", min=100, default=4500, suffix="mm")
+    bridge_height = vkt.NumberField("Bridge Height, H", min=100, default=3000, suffix="mm")
     roof_pitch_angle = vkt.NumberField("Roof Pitch Angle, θ", suffix="°", default=12, min=0, max=60)
-    n_divisions = vkt.NumberField("Number of Divisions", min=1, default=6)
+    n_divisions = vkt.NumberField("Number of Divisions", min=1, default=4)
 
     cross_section = vkt.OptionField(
-        "Cross-Section Size (outer, used for projected width)",
-        options=["SHS50x4", "SHS75x4", "SHS100x4", "SHS150x4"],
-        default="SHS50x4",
+        "Cross-Section Size",
+        options=["HSS200×200×8", "HSS250×250×10", "HSS300×300×12", "HSS350×350×16"],
+        default="HSS200×200×8",
     )
     lb_3 = vkt.LineBreak()
 
@@ -268,17 +299,23 @@ class Controller(vkt.Controller):
     @vkt.GeometryView("3D Model", x_axis_to_right=True)
     def create_render(self, params, **kwargs):
         beam = RectangularTrussBeam(
-            length=float(params.truss_length) / 1000.0,
-            width=float(params.truss_width) / 1000.0,
-            height=float(params.truss_height) / 1000.0,
+            length=float(params.bridge_length) / 1000.0,
+            width=float(params.bridge_width) / 1000.0,
+            height=float(params.bridge_height) / 1000.0,
             n_diagonals=int(params.n_divisions),
         )
 
-        nodes, lines = beam.build()
+        nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
         nodes, lines = beam.clean_model()
+        nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
 
         sections_group = []
-        cs_size_m = float(params.cross_section.replace("SHS", "").split("x")[0]) / 1000.0
+        cs_size_m = float(params.cross_section.replace("HSS", "").split("×")[0]) / 1000.0
+        B_m = float(params.bridge_width) / 1000.0
+        L_m = float(params.bridge_length) / 1000.0
+
+        # Bridge material with red color
+        bridge_material = Material(color=vkt.Color.from_hex("#C41E3A"), roughness=0.8, metalness=0.3)
 
         for line_id, line_data in lines.items():
             ni = nodes[line_data["NodeI"]]
@@ -289,8 +326,43 @@ class Controller(vkt.Controller):
 
             axis = Line(pi, pj)
             sections_group.append(
-                RectangularExtrusion(cs_size_m, cs_size_m, axis, identifier=str(line_id))
+                RectangularExtrusion(cs_size_m, cs_size_m, axis, identifier=str(line_id), material=bridge_material)
             )
+
+        # --- Add concrete abutments ---
+        height = float(params.bridge_height) / 1000.0
+        concrete_material = Material(color=vkt.Color(80, 80, 80), roughness=0.9, metalness=0.1)
+        
+        # Left abutment
+        node2 = vkt.Point(-0.4, -B_m, -height/2 + cs_size_m)
+        node1 = vkt.Point(-0.400, 2*B_m, -height/2 + cs_size_m)
+        center_line = vkt.Line(node1, node2)
+        profile = notched_profile(width=1.000, height=height, notch=cs_size_m)
+        solid = vkt.Extrusion(profile, center_line, profile_rotation=0, material=concrete_material)
+        sections_group.append(vkt.Group([solid, center_line]))
+        
+        # Right abutment
+        node1 = vkt.Point(L_m + 0.4, -B_m, -height/2 + cs_size_m) 
+        node2 = vkt.Point(L_m + 0.400, 2*B_m, -height/2 + cs_size_m)
+        center_line = vkt.Line(node1, node2)
+        profile = notched_profile(width=1.000, height=height, notch=cs_size_m)
+        solid = vkt.Extrusion(profile, center_line, profile_rotation=180, material=concrete_material)
+        sections_group.append(vkt.Group([solid, center_line]))
+
+        # --- Add bridge deck ---
+        deck_thickness = 0.2  # meters
+        
+        deck_material = Material(color=vkt.Color(100, 100, 100), roughness=0.9, metalness=0.1)
+        deck = SquareBeam(L_m, B_m, deck_thickness, material=deck_material)
+        deck.translate((L_m / 2, B_m / 2, deck_thickness / 2))  # Position at z=0
+        sections_group.append(deck)
+        
+        # --- Add asphalt layer on top ---
+        asphalt_thickness = 0.05  # meters
+        asphalt_material = Material(color=vkt.Color(40, 40, 40), roughness=1.0, metalness=0.0)
+        asphalt = SquareBeam(L_m, B_m, asphalt_thickness, material=asphalt_material)
+        asphalt.translate((L_m / 2, B_m / 2, deck_thickness / 2 + asphalt_thickness / 2))
+        sections_group.append(asphalt)
 
         # ---------- translucent red rectangle on the side (xz plane => y constant) ----------
         xs = [float(n["x"]) for n in nodes.values()]
@@ -301,8 +373,7 @@ class Controller(vkt.Controller):
         y_min, y_max = min(ys), max(ys)
         z_min, z_max = min(zs), max(zs)
 
-        # pick which side: y_min or y_max, offset 2x truss width away
-        B_m = float(params.truss_width) / 1000.0
+        # pick which side: y_min or y_max, offset 2x bridge width away
         side_y = y_min - 2 * B_m
 
         # small inset so it doesn't exactly coincide with members
@@ -373,7 +444,7 @@ class Controller(vkt.Controller):
 
         # ---------- Pressure label at center of plate ----------
         # Calculate pressure
-        H_m = float(params.truss_height) / 1000.0
+        H_m = float(params.bridge_height) / 1000.0
         z_centroid_m = H_m / 2.0
         vp = _velocity_pressure_kpa(
             wind_speed_ms=float(params.wind_speed_ms),
@@ -404,9 +475,9 @@ class Controller(vkt.Controller):
 
     def download_json_data(self, params, **kwargs):
         # Unit conversions (mm -> m)
-        L_m = float(params.truss_length) / 1000.0
-        B_m = float(params.truss_width) / 1000.0
-        H_m = float(params.truss_height) / 1000.0
+        L_m = float(params.bridge_length) / 1000.0
+        B_m = float(params.bridge_width) / 1000.0
+        H_m = float(params.bridge_height) / 1000.0
 
         # Roof geometry (kept because you already had it; not used for z_ref in open-truss method)
         theta_deg = float(params.roof_pitch_angle)
@@ -424,11 +495,12 @@ class Controller(vkt.Controller):
             height=H_m,
             n_diagonals=int(params.n_divisions),
         )
-        nodes, lines = beam.build()
+        nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
         nodes, lines = beam.clean_model()
+        nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
 
-        # Member projected width: use SHS outer size as projected width
-        member_proj_width_m = float(params.cross_section.replace("SHS", "").split("x")[0]) / 1000.0
+        # Member projected width: use HSS outer size as projected width
+        member_proj_width_m = float(params.cross_section.replace("HSS", "").split("×")[0]) / 1000.0
 
         # Projected solid area Af and centroid height z_ref (centroid at H/2)
         proj = _projected_area_and_centroid_height(
@@ -479,9 +551,9 @@ class Controller(vkt.Controller):
             "risk_category": str(params.risk_category),
             "site_elevation_m": float(params.site_elevation_m),
 
-            "truss_length_mm": float(params.truss_length),
-            "truss_width_mm": float(params.truss_width),
-            "truss_height_mm": float(params.truss_height),
+            "bridge_length_mm": float(params.bridge_length),
+            "bridge_width_mm": float(params.bridge_width),
+            "bridge_height_mm": float(params.bridge_height),
             "n_divisions": int(params.n_divisions),
             "cross_section": str(params.cross_section),
 
