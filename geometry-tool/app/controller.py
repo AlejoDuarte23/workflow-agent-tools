@@ -1,8 +1,43 @@
 import json
+from math import pi
+from typing import Optional, Tuple
+
 import viktor as vkt
 
-from viktor.geometry import Point, Line, RectangularExtrusion
+from viktor.geometry import Point, Line, Polygon, Material, Group, RectangularExtrusion
 from app.truss_beam import RectangularTrussBeam
+
+
+def notched_profile(width=2000.0, height=2400.0, notch=400.0) -> list[vkt.Point]:
+    """
+    Profile is defined in the local XY plane (z=0).
+    This outline is a width x height rectangle with a notch (notch x notch)
+    removed at the top-right corner.
+
+    Clockwise + closed (first point repeated at the end) as required by Extrusion.
+    """
+    w = float(width)
+    h = float(height)
+    n = float(notch)
+
+    # Center the profile around the local origin (0, 0) so the extrusion line passes through the center
+    xL, xR = -w / 2, w / 2
+    yB, yT = -h / 2, h / 2
+
+    xN = xR - n      # notch inner x
+    yN = yT - n      # notch bottom y
+
+    # Clockwise loop
+    return [
+        vkt.Point(xL, yB),
+        vkt.Point(xL, yT),
+        vkt.Point(xN, yT),
+        vkt.Point(xN, yN),
+        vkt.Point(xR, yN),
+        vkt.Point(xR, yB),
+        vkt.Point(xL, yB),
+    ]
+
 
 
 class Parametrization(vkt.Parametrization):
@@ -11,9 +46,9 @@ class Parametrization(vkt.Parametrization):
     inputs_title = vkt.Text('''## Truss Geometry  
 Please fill in the following parameters to create the truss beam:''')
     
-    truss_length = vkt.NumberField("Truss Length", min=100, default=10000, suffix="mm")
-    truss_width = vkt.NumberField("Truss Width", min=100, default=1000, suffix="mm")
-    truss_height = vkt.NumberField("Truss Height", min=100, default=1500, suffix="mm")
+    truss_length = vkt.NumberField("Truss Length", min=100, default=20000, suffix="mm")
+    truss_width = vkt.NumberField("Truss Width", min=100, default=3000, suffix="mm")
+    truss_height = vkt.NumberField("Truss Height", min=100, default=4000, suffix="mm")
     n_divisions = vkt.NumberField("Number of Divisions", min=1, default=6)
     
     line_break = vkt.LineBreak()
@@ -46,8 +81,9 @@ class Controller(vkt.Controller):
         )
         
         # Build and clean the model
-        nodes, lines = beam.build()
+        nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
         nodes, lines = beam.clean_model()
+        nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
         
         # Parse cross-section size (e.g., "SHS50x4" -> 50)
         cs_size_mm = float(params.cross_section.replace("SHS", "").split("x")[0])
@@ -81,37 +117,82 @@ class Controller(vkt.Controller):
     
     @vkt.GeometryView("3D Model", x_axis_to_right=True)
     def create_render(self, params, **kwargs):
-        # Create the truss beam with parameters (convert from mm to m)
         beam = RectangularTrussBeam(
             length=params.truss_length / 1000,
             width=params.truss_width / 1000,
             height=params.truss_height / 1000,
             n_diagonals=int(params.n_divisions),
         )
-        
-        # Build and clean the model
-        nodes, lines = beam.build()
+
+        nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
         nodes, lines = beam.clean_model()
-        
-        # Create 3D geometry
-        sections_group = []
-        
-        # Parse cross-section size (e.g., "SHS50x4" -> 0.05 meters)
+        nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
+
+        # Cross-section (meters)
         cs_size = float(params.cross_section.replace("SHS", "").split("x")[0]) / 1000
-        
+
+        # --- Detect which node axis is width / height in the beam output ---
+        target_w = params.truss_width / 1000
+        target_h = params.truss_height / 1000
+
+        ys = [n["y"] for n in nodes.values()]
+        zs = [n["z"] for n in nodes.values()]
+        span_y = max(ys) - min(ys)
+        span_z = max(zs) - min(zs)
+
+        # Option A: y=width, z=height
+        cost_a = abs(span_y - target_w) + abs(span_z - target_h)
+        # Option B: y=height, z=width
+        cost_b = abs(span_y - target_h) + abs(span_z - target_w)
+
+        y_is_width = cost_a <= cost_b
+
+        def to_vkt_point(n):
+            # Ensure: VIKTOR uses x=length, y=width, z=height for both truss + embankment placement
+            if y_is_width:
+                return Point(n["x"], n["y"], n["z"])  # (x, width, height)
+            return Point(n["x"], n["z"], n["y"])      # swap (y<->z) => (x, width, height)
+
+        # --- Build truss geometry ---
+        sections_group = []
         for line_id, line_data in lines.items():
-            node_i = nodes[line_data["NodeI"]]
-            node_j = nodes[line_data["NodeJ"]]
-            
-            # Map coordinates: x -> x, y (height) -> y (VIKTOR vertical), z -> z
-            point_i = Point(node_i["x"], node_i["y"], node_i["z"])
-            point_j = Point(node_j["x"], node_j["y"], node_j["z"])
-            
-            line_k = Line(point_i, point_j)
-            section_k = RectangularExtrusion(cs_size, cs_size, line_k, identifier=str(line_id))
-            sections_group.append(section_k)
+            ni = nodes[line_data["NodeI"]]
+            nj = nodes[line_data["NodeJ"]]
+            pi = to_vkt_point(ni)
+            pj = to_vkt_point(nj)
+            sections_group.append(
+                RectangularExtrusion(cs_size, cs_size, Line(pi, pj), identifier=str(line_id))
+            )
+
+
+        sections_group = []
+        for line_id, line_data in lines.items():
+            ni = nodes[line_data["NodeI"]]
+            nj = nodes[line_data["NodeJ"]]
+            pi = to_vkt_point(ni)
+            pj = to_vkt_point(nj)
+            sections_group.append(
+                RectangularExtrusion(cs_size, cs_size, Line(pi, pj), identifier=str(line_id))
+            )
+
+        height =  params.truss_height/1000
+        node2 = vkt.Point(-0.4, -params.truss_width/1000, -height/2 + cs_size)
+        node1 = vkt.Point(-0.400, 2*params.truss_width/1000, -height/2 + cs_size)
+        center_line = vkt.Line(node1, node2)
+        profile = notched_profile(width=1.000,height=height , notch=cs_size)
+        solid = vkt.Extrusion(profile, center_line, profile_rotation=0)
+
+        sections_group.append(vkt.Group([solid, center_line]))
         
-        return vkt.GeometryResult(geometry=sections_group)
+        node1 = vkt.Point(params.truss_length/1000+ 0.4, -params.truss_width/1000, -height/2 + cs_size) 
+        node2 = vkt.Point(params.truss_length/1000+ 0.400, 2*params.truss_width/1000, -height/2 + cs_size)
+        center_line = vkt.Line(node1, node2)
+
+        profile = notched_profile(width=1.000, height=height, notch=cs_size)
+        solid = vkt.Extrusion(profile, center_line, profile_rotation=180)
+
+        sections_group.append(vkt.Group([solid, center_line]))
+        return vkt.GeometryResult(sections_group)
 
     @vkt.DataView("Truss Information")
     def visualize_data(self, params, **kwargs):
@@ -125,8 +206,9 @@ class Controller(vkt.Controller):
         )
         
         # Build and clean the model
-        nodes, lines = beam.build()
+        nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
         nodes, lines = beam.clean_model()
+        nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
         
         # Parse cross-section size
         cs_size_mm = float(params.cross_section.replace("SHS", "").split("x")[0])
