@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 
 import viktor as vkt
 
-from viktor.geometry import Point, Line, Polygon, Material, Group, RectangularExtrusion
+from viktor.geometry import Point, Line, Polygon, Material, Group, RectangularExtrusion, SquareBeam
 from app.truss_beam import RectangularTrussBeam
 
 
@@ -166,21 +166,23 @@ class Controller(vkt.Controller):
 
 
         sections_group = []
+        truss_material = Material(color=vkt.Color.from_hex("#C41E3A"), roughness=0.8, metalness=0.3)
         for line_id, line_data in lines.items():
             ni = nodes[line_data["NodeI"]]
             nj = nodes[line_data["NodeJ"]]
             pi = to_vkt_point(ni)
             pj = to_vkt_point(nj)
             sections_group.append(
-                RectangularExtrusion(cs_size, cs_size, Line(pi, pj), identifier=str(line_id))
+                RectangularExtrusion(cs_size, cs_size, Line(pi, pj), identifier=str(line_id), material=truss_material)
             )
 
         height =  params.truss_height/1000
+        concrete_material = Material(color=vkt.Color(80, 80, 80), roughness=0.9, metalness=0.1)
         node2 = vkt.Point(-0.4, -params.truss_width/1000, -height/2 + cs_size)
         node1 = vkt.Point(-0.400, 2*params.truss_width/1000, -height/2 + cs_size)
         center_line = vkt.Line(node1, node2)
         profile = notched_profile(width=1.000,height=height , notch=cs_size)
-        solid = vkt.Extrusion(profile, center_line, profile_rotation=0)
+        solid = vkt.Extrusion(profile, center_line, profile_rotation=0, material=concrete_material)
 
         sections_group.append(vkt.Group([solid, center_line]))
         
@@ -189,9 +191,27 @@ class Controller(vkt.Controller):
         center_line = vkt.Line(node1, node2)
 
         profile = notched_profile(width=1.000, height=height, notch=cs_size)
-        solid = vkt.Extrusion(profile, center_line, profile_rotation=180)
+        solid = vkt.Extrusion(profile, center_line, profile_rotation=180, material=concrete_material)
 
         sections_group.append(vkt.Group([solid, center_line]))
+
+        # --- Add bridge deck ---
+        deck_thickness = 0.2  # meters
+        deck_length = params.truss_length / 1000
+        deck_width = params.truss_width / 1000
+        
+        deck_material = Material(color=vkt.Color(100, 100, 100), roughness=0.9, metalness=0.1)
+        deck = SquareBeam(deck_length, deck_width, deck_thickness, material=deck_material)
+        deck.translate((deck_length / 2, deck_width / 2, deck_thickness / 2))  # Position at z=0
+        sections_group.append(deck)
+        
+        # --- Add asphalt layer on top ---
+        asphalt_thickness = 0.05  # meters
+        asphalt_material = Material(color=vkt.Color(40, 40, 40), roughness=1.0, metalness=0.0)
+        asphalt = SquareBeam(deck_length, deck_width, asphalt_thickness, material=asphalt_material)
+        asphalt.translate((deck_length / 2, deck_width / 2, deck_thickness / 2 + asphalt_thickness / 2))
+        sections_group.append(asphalt)
+
         return vkt.GeometryResult(sections_group)
 
     @vkt.DataView("Truss Information")
