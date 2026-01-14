@@ -218,46 +218,26 @@ def plot_deformed_mesh(
     )
 
     # ------------------------------------------------------------------ #
-    # 3. Section legend entries
+    # 3. Max-displacement box with critical combination info
     # ------------------------------------------------------------------ #
-    legend_labels = set()
-    for lid, ln in lines.items():
-        m_type: MemberType | None = ln.get("Type")
-        if m_type is None:
-            continue
-        cs_id = members[lid]["cross_section_id"]
-        if cs_id not in cross_sections:
-            continue
-        desc = cross_sections[cs_id].get("Description", f"Section {cross_sections[cs_id]['name']}")
-        legend_labels.add(f"{m_type}: {desc}")
-
-    for label in sorted(legend_labels):
-        fig.add_trace(
-            go.Scatter3d(
-                x=[None],
-                y=[None],
-                z=[None],
-                mode="markers",
-                marker=dict(size=8, color="rgba(0,0,0,0)", symbol="square"),
-                name=label,
-                legendgroup="sections",
-                hoverinfo="skip",
-            )
-        )
-
-    # ------------------------------------------------------------------ #
-    # 4. Max-displacement box with critical combination info
-    # ------------------------------------------------------------------ #
-    max_abs = max(abs(dmin), abs(dmax))
+    # Calculate total resultant deformation for each node
+    max_resultant = 0.0
+    for nid in nodes.keys():
+        dx = get_disp(nid, "dx")
+        dy = get_disp(nid, "dy")
+        dz = get_disp(nid, "dz")
+        resultant = np.sqrt(dx**2 + dy**2 + dz**2)
+        if resultant > max_resultant:
+            max_resultant = resultant
     
     # Build annotation text with critical combination if provided
     if critical_combination_name:
         annotation_text = (
             f"<b>Critical Combination: {critical_combination_name}</b><br>"
-            f"Max Model Deformation |ΔZ|: {max_abs:.3f} mm"
+            f"Max Resultant Deformation: {max_resultant:.3f} mm"
         )
     else:
-        annotation_text = f"<b>Max Model Deformation |ΔZ|</b><br>{max_abs:.3f} mm"
+        annotation_text = f"<b>Max Resultant Deformation</b><br>{max_resultant:.3f} mm"
     
     fig.add_annotation(
         text=annotation_text,
@@ -272,7 +252,7 @@ def plot_deformed_mesh(
     )
 
     # ------------------------------------------------------------------ #
-    # 5. Layout
+    # 4. Layout
     # ------------------------------------------------------------------ #
     fig.update_layout(
         scene=dict(
@@ -283,17 +263,7 @@ def plot_deformed_mesh(
             bgcolor="white",
             camera=dict(eye=dict(x=1.3, y=1.3, z=1.3)),
         ),
-        legend=dict(
-            title=dict(text="Sections"),
-            x=0.02,
-            y=0.02,  # bottom-left
-            xanchor="left",
-            yanchor="bottom",
-            bgcolor="rgba(255,255,255,0.85)",
-            borderwidth=1,
-            itemsizing="constant",
-            font=dict(size=16, color="black"),
-        ),
+        showlegend=False,
         paper_bgcolor="white",
         margin=dict(l=0, r=0, t=40, b=0),
     )
