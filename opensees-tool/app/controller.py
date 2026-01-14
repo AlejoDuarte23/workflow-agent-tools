@@ -14,29 +14,30 @@ from app.plots.model3d import plot_model_3d
 class Parametrization(vkt.Parametrization):
     # Step 1: Geometry
     step_1 = vkt.Step("Step 1 - Geometry", views=["show_model"])
-    step_1.intro = vkt.Text("""# Rectangular Truss Beam - OpenSees Analysis
+    step_1.intro = vkt.Text("""# Bridge Generator - OpenSees Analysis
 
-Define the truss beam geometry and cross-section parameters below.""")
-    step_1.truss_length = vkt.NumberField("Truss Length", min=100, default=10000, suffix="mm")
-    step_1.truss_width = vkt.NumberField("Truss Width", min=100, default=1000, suffix="mm")
-    step_1.truss_height = vkt.NumberField("Truss Height", min=100, default=1500, suffix="mm")
-    step_1.n_divisions = vkt.NumberField("Number of Divisions", min=1, default=6)
+Define the bridge geometry and cross-section parameters below.""")
+    step_1.bridge_length = vkt.NumberField("Bridge Length", min=100, default=20000, suffix="mm")
+    step_1.bridge_width = vkt.NumberField("Bridge Width", min=100, default=4500, suffix="mm")
+    step_1.bridge_height = vkt.NumberField("Bridge Height", min=100, default=3000, suffix="mm")
+    step_1.n_divisions = vkt.NumberField("Number of Divisions", min=2, default=4)
     step_1.section_title = vkt.Text("""## Cross-Section
-Select a cross section size for the truss members:""")
+Select a cross section size for the bridge members:""")
     step_1.cross_section = vkt.OptionField(
         "Cross-Section Size", 
-        options=["SHS50x4", "SHS75x4", "SHS100x4", "SHS150x4"], 
-        default="SHS100x4"
+        options=["HSS200x200x8", "HSS250x250x10", "HSS300x300x12", "HSS350x350x16"], 
+        default="HSS200x200x8"
     )
     
     # Step 2: Loads (Gravitational + Wind)
     step_2 = vkt.Step("Step 2 - Loads", views=["show_loads", "show_wind_loads"])
     step_2.gravity_intro = vkt.Text("""# Gravitational Loads
 Define the gravitational load to apply to the truss beam. The load will be visualized as point loads at all nodes in the XY plane (z=0).""")
-    step_2.load_q = vkt.NumberField("Load Q", min=0, default=5, suffix="kPa")
+    step_2.load_q = vkt.NumberField("Load Q", min=0, default=4, suffix="kPa")
     step_2.wind_intro = vkt.Text("""# Wind Loads
 Define the wind pressure to apply to the truss beam. The load will be visualized as point loads at nodes on the windward face (ZX plane at y=width, where z is between 0 and the truss height). Wind direction is in the positive Y direction.""")
-    step_2.wind_pressure = vkt.NumberField("Wind Pressure", min=0, default=1, suffix="kPa")
+    step_2.wind_pressure = vkt.NumberField("Wind Pressure", min=0, default=1.5, suffix="kPa")
+    step_2.wind_cf = vkt.NumberField("Cf (Force Coefficient)", min=0, default=1.6)
 
     # Step 3: Run Model
     step_3 = vkt.Step("Step 3 - Run Model", views=["show_deformation"])
@@ -64,8 +65,8 @@ This button downloads the results in a JSON file. It gets the results for each c
 Run a sensitivity analysis to see how the truss depth (height) affects the maximum vertical deformation.
 
 The analysis will vary the truss height from the minimum to maximum values and plot the results.""")
-    step_4.min_height = vkt.NumberField("Minimum Height", min=100, default=500, suffix="mm")
-    step_4.max_height = vkt.NumberField("Maximum Height", min=100, default=3000, suffix="mm")
+    step_4.min_height = vkt.NumberField("Minimum Height", min=100, default=1000, suffix="mm")
+    step_4.max_height = vkt.NumberField("Maximum Height", min=100, default=7000, suffix="mm")
     step_4.n_steps = vkt.NumberField("Number of Steps", min=3, max=20, default=10)
     step_4.download_text = vkt.Text("""## Download Sensitivity Results
 This button downloads the sensitivity analysis results in a JSON file. It includes the truss height values and corresponding maximum Z deformations.""")
@@ -91,13 +92,14 @@ class Controller(vkt.Controller):
         
         # Build the truss beam geometry (in mm for visualization)
         beam = RectangularTrussBeam(
-            length=params.step_1.truss_length,
-            width=params.step_1.truss_width,
-            height=params.step_1.truss_height,
+            length=params.step_1.bridge_length,
+            width=params.step_1.bridge_width,
+            height=params.step_1.bridge_height,
             n_diagonals=int(params.step_1.n_divisions),
         )
-        nodes, lines = beam.build()
+        nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
         nodes, lines = beam.clean_model()
+        nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
         
         # Convert nodes to NodesInfoDict format (with id field)
         nodes_dict: NodesInfoDict = {}
@@ -159,13 +161,14 @@ class Controller(vkt.Controller):
         
         # Build the truss beam geometry (in mm for OpenSees)
         beam = RectangularTrussBeam(
-            length=params.step_1.truss_length,
-            width=params.step_1.truss_width,
-            height=params.step_1.truss_height,
+            length=params.step_1.bridge_length,
+            width=params.step_1.bridge_width,
+            height=params.step_1.bridge_height,
             n_diagonals=int(params.step_1.n_divisions),
         )
-        nodes, lines = beam.build()
+        nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
         nodes, lines = beam.clean_model()
+        nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
         
         # Convert nodes to NodesInfoDict format (with id field)
         nodes_dict: NodesInfoDict = {}
@@ -203,9 +206,9 @@ class Controller(vkt.Controller):
         
         # Identify support nodes: z=0 AND (x=0 OR x=length)
         from app.opensees.utils import get_nodes_by_x_and_z
-        length = params.step_1.truss_length
-        width = params.step_1.truss_width
-        height = params.step_1.truss_height
+        length = params.step_1.bridge_length
+        width = params.step_1.bridge_width
+        height = params.step_1.bridge_height
         support_nodes_start = get_nodes_by_x_and_z(nodes_dict, x=0, z=0)
         support_nodes_end = get_nodes_by_x_and_z(nodes_dict, x=length, z=0)
         support_nodes = support_nodes_start + support_nodes_end
@@ -271,8 +274,8 @@ class Controller(vkt.Controller):
             trib_height = height  # mm
             trib_area_wind = trib_length * trib_height  # mm²
             
-            # Convert kPa to N/mm²
-            pressure_n_mm2 = wind_pressure * 0.001  # N/mm²
+            # Convert kPa to N/mm² and apply Cf
+            pressure_n_mm2 = wind_pressure * params.step_2.wind_cf * 0.001  # N/mm²
             point_load_n = pressure_n_mm2 * trib_area_wind  # N
             
             for node_id in wind_nodes:
@@ -320,9 +323,9 @@ class Controller(vkt.Controller):
                 "dz": round(max_dz, 4),
             },
             "model_parameters": {
-                "truss_length_mm": params.step_1.truss_length,
-                "truss_width_mm": params.step_1.truss_width,
-                "truss_height_mm": params.step_1.truss_height,
+                "bridge_length_mm": params.step_1.bridge_length,
+                "bridge_width_mm": params.step_1.bridge_width,
+                "bridge_height_mm": params.step_1.bridge_height,
                 "n_divisions": int(params.step_1.n_divisions),
                 "cross_section": selected_cs_name,
                 "load_q_kPa": load_q,
@@ -364,8 +367,8 @@ class Controller(vkt.Controller):
         n_steps = int(params.step_4.n_steps)
         
         # Fixed parameters from Step 1
-        length = params.step_1.truss_length
-        width = params.step_1.truss_width
+        length = params.step_1.bridge_length
+        width = params.step_1.bridge_width
         n_divisions = int(params.step_1.n_divisions)
         
         # Load parameters from Step 2
@@ -390,8 +393,9 @@ class Controller(vkt.Controller):
                 height=height,
                 n_diagonals=n_divisions,
             )
-            nodes, lines = beam.build()
+            nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
             nodes, lines = beam.clean_model()
+            nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
             
             # Convert nodes to NodesInfoDict format
             nodes_dict: NodesInfoDict = {}
@@ -503,8 +507,8 @@ class Controller(vkt.Controller):
         result_data = {
             "sensitivity_analysis": sensitivity_data,
             "model_parameters": {
-                "truss_length_mm": length,
-                "truss_width_mm": width,
+                "bridge_length_mm": length,
+                "bridge_width_mm": width,
                 "min_height_mm": min_height,
                 "max_height_mm": max_height,
                 "n_steps": n_steps,
@@ -537,13 +541,14 @@ class Controller(vkt.Controller):
         
         # Build the truss beam geometry (in mm for OpenSees)
         beam = RectangularTrussBeam(
-            length=params.step_1.truss_length,
-            width=params.step_1.truss_width,
-            height=params.step_1.truss_height,
+            length=params.step_1.bridge_length,
+            width=params.step_1.bridge_width,
+            height=params.step_1.bridge_height,
             n_diagonals=int(params.step_1.n_divisions),
         )
-        nodes, lines = beam.build()
+        nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
         nodes, lines = beam.clean_model()
+        nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
         
         # Convert nodes to NodesInfoDict format (with id field)
         nodes_dict: NodesInfoDict = {}
@@ -581,9 +586,9 @@ class Controller(vkt.Controller):
         
         # Identify support nodes: z=0 AND (x=0 OR x=length)
         from app.opensees.utils import get_nodes_by_x_and_z
-        length = params.step_1.truss_length
-        width = params.step_1.truss_width
-        height = params.step_1.truss_height
+        length = params.step_1.bridge_length
+        width = params.step_1.bridge_width
+        height = params.step_1.bridge_height
         support_nodes_start = get_nodes_by_x_and_z(nodes_dict, x=0, z=0)
         support_nodes_end = get_nodes_by_x_and_z(nodes_dict, x=length, z=0)
         support_nodes = support_nodes_start + support_nodes_end
@@ -626,7 +631,7 @@ class Controller(vkt.Controller):
             n_divisions = int(params.step_1.n_divisions)
             trib_length = length / (n_divisions + 1)
             trib_area_wind = trib_length * height
-            pressure_n_mm2 = wind_pressure * 0.001
+            pressure_n_mm2 = wind_pressure * params.step_2.wind_cf * 0.001
             point_load_n = pressure_n_mm2 * trib_area_wind
             
             for node_id in wind_nodes:
@@ -683,13 +688,14 @@ class Controller(vkt.Controller):
         
         # Build the truss beam geometry (in mm for visualization)
         beam = RectangularTrussBeam(
-            length=params.step_1.truss_length,
-            width=params.step_1.truss_width,
-            height=params.step_1.truss_height,
+            length=params.step_1.bridge_length,
+            width=params.step_1.bridge_width,
+            height=params.step_1.bridge_height,
             n_diagonals=int(params.step_1.n_divisions),
         )
-        nodes, lines = beam.build()
+        nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
         nodes, lines = beam.clean_model()
+        nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
         
         # Convert nodes to NodesInfoDict format (with id field)
         nodes_dict: NodesInfoDict = {}
@@ -756,13 +762,14 @@ class Controller(vkt.Controller):
         
         # Build the truss beam geometry (in mm for visualization)
         beam = RectangularTrussBeam(
-            length=params.step_1.truss_length,
-            width=params.step_1.truss_width,
-            height=params.step_1.truss_height,
+            length=params.step_1.bridge_length,
+            width=params.step_1.bridge_width,
+            height=params.step_1.bridge_height,
             n_diagonals=int(params.step_1.n_divisions),
         )
-        nodes, lines = beam.build()
+        nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
         nodes, lines = beam.clean_model()
+        nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
         
         # Convert nodes to NodesInfoDict format (with id field)
         nodes_dict: NodesInfoDict = {}
@@ -800,8 +807,8 @@ class Controller(vkt.Controller):
         
         # Get wind pressure from params
         wind_pressure = params.step_2.wind_pressure or 0.0
-        truss_width = params.step_1.truss_width
-        truss_height = params.step_1.truss_height
+        bridge_width = params.step_1.bridge_width
+        bridge_height = params.step_1.bridge_height
         
         # Create the wind loads visualization plot
         fig = plot_wind_loads_3d(
@@ -809,8 +816,8 @@ class Controller(vkt.Controller):
             lines=lines_dict,
             members=members,
             cross_sections=cross_sections,
-            truss_width=truss_width,
-            truss_height=truss_height,
+            truss_width=bridge_width,
+            truss_height=bridge_height,
             wind_pressure=wind_pressure,
         )
         
@@ -840,8 +847,8 @@ class Controller(vkt.Controller):
         n_steps = int(params.step_4.n_steps)
         
         # Fixed parameters from Step 1
-        length = params.step_1.truss_length
-        width = params.step_1.truss_width
+        length = params.step_1.bridge_length
+        width = params.step_1.bridge_width
         n_divisions = int(params.step_1.n_divisions)
         
         # Load parameters from Step 2
@@ -867,8 +874,9 @@ class Controller(vkt.Controller):
                 height=height,
                 n_diagonals=n_divisions,
             )
-            nodes, lines = beam.build()
+            nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
             nodes, lines = beam.clean_model()
+            nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
             
             # Convert nodes to NodesInfoDict format
             nodes_dict: NodesInfoDict = {}

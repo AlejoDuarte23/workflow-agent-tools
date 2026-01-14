@@ -227,7 +227,9 @@ def plot_loads_3d(
     ]
 
     if nodes_with_load and load > 0:
-        arrow_height, offset = 400.0, 300.0
+        bridge_height = z1 - z0
+        arrow_height = 0.3 * bridge_height
+        offset = 0.1 * bridge_height
         cyl_h, cone_h = 0.8 * arrow_height, 0.2 * arrow_height
         cyl_radius, cone_radius = 0.04 * arrow_height, 0.15 * arrow_height
         for nid in nodes_with_load:
@@ -409,7 +411,8 @@ def plot_wind_loads_3d(
     ]
 
     if nodes_with_wind_load and wind_pressure > 0:
-        arrow_length, offset = 400.0, 300.0
+        arrow_length = 0.3 * truss_height
+        offset = 0.1 * truss_height
         cyl_len, cone_len = 0.8 * arrow_length, 0.2 * arrow_length
         cyl_radius, cone_radius = 0.04 * arrow_length, 0.15 * arrow_length
         for nid in nodes_with_wind_load:

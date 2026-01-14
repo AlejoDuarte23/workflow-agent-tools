@@ -101,6 +101,8 @@ class RectangularTrussBeam(Component):
     def build(self) -> tuple[
         Annotated[dict[int, NodeDict], "Dictionary of node IDs to node coordinates"],
         Annotated[dict[int, LineDict], "Dictionary of line IDs to line connectivity"],
+        Annotated[list[int], "List of top-left chord node IDs"],
+        Annotated[list[int], "List of top-right chord node IDs"],
     ]:
         """Build the rectangular truss beam geometry."""
         # Create four chords at corners of the rectangular cross-section
@@ -145,7 +147,7 @@ class RectangularTrussBeam(Component):
         # Top face horizontals
         self.create_vertical_bracing(chord_tl_ids, chord_tr_ids)
 
-        return self.nodes, self.lines
+        return self.nodes, self.lines, chord_tl_ids, chord_tr_ids
 
     def clean_model(self) -> tuple[
         Annotated[dict[int, NodeDict], "Dictionary of deduplicated node IDs to coordinates"],
@@ -201,6 +203,39 @@ class RectangularTrussBeam(Component):
         self.lines = unique_lines
         return self.nodes, self.lines
 
+    def remove_top_edge_nodes(
+        self,
+        chord_tl_ids: list[int],
+        chord_tr_ids: list[int],
+    ) -> tuple[
+        Annotated[dict[int, NodeDict], "Dictionary of node IDs after removing top edge nodes"],
+        Annotated[dict[int, LineDict], "Dictionary of line IDs after removing connected lines"],
+    ]:
+        """Remove the first and last nodes of the top chords and their connected lines."""
+        # Get the 4 top edge node IDs (first and last of each top chord)
+        nodes_to_remove = {
+            chord_tl_ids[0],   # Top-left first node
+            chord_tl_ids[-1],  # Top-left last node
+            chord_tr_ids[0],   # Top-right first node
+            chord_tr_ids[-1],  # Top-right last node
+        }
+
+        # Remove lines connected to these nodes
+        lines_to_remove = []
+        for line_tag, line in self.lines.items():
+            if line["NodeI"] in nodes_to_remove or line["NodeJ"] in nodes_to_remove:
+                lines_to_remove.append(line_tag)
+
+        for line_tag in lines_to_remove:
+            del self.lines[line_tag]
+
+        # Remove the nodes
+        for node_id in nodes_to_remove:
+            if node_id in self.nodes:
+                del self.nodes[node_id]
+
+        return self.nodes, self.lines
+
 
 if __name__ == "__main__":
     # Example usage
@@ -210,8 +245,9 @@ if __name__ == "__main__":
         height=1.5,
         n_diagonals=6,
     )
-    nodes, lines = beam.build()
+    nodes, lines, chord_tl_ids, chord_tr_ids = beam.build()
     nodes, lines = beam.clean_model()
+    nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
 
     print(f"Number of nodes: {len(nodes)}")
     print(f"Number of lines: {len(lines)}")
