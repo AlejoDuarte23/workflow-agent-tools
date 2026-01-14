@@ -41,42 +41,43 @@ def notched_profile(width=2000.0, height=2400.0, notch=400.0) -> list[vkt.Point]
 
 
 class Parametrization(vkt.Parametrization):
-    intro = vkt.Text("# Rectangular Truss Beam Generator")
+    intro = vkt.Text("""# Bridge Generator
+
+This application generates the geometry for light bridges. Design and visualize a parametric truss bridge with concrete abutments, deck, and asphalt layer. Configure bridge dimensions, select structural member sizes from standard steel sections, and view the complete 3D model with realistic materials. Export the geometry data in JSON format for further structural analysis or documentation.
+
+Please fill in the following parameters to create the bridge:""")
     
-    inputs_title = vkt.Text('''## Truss Geometry  
-Please fill in the following parameters to create the truss beam:''')
-    
-    truss_length = vkt.NumberField("Truss Length", min=100, default=20000, suffix="mm")
-    truss_width = vkt.NumberField("Truss Width", min=100, default=3000, suffix="mm")
-    truss_height = vkt.NumberField("Truss Height", min=100, default=4000, suffix="mm")
-    n_divisions = vkt.NumberField("Number of Divisions", min=1, default=6)
+    bridge_length = vkt.NumberField("Bridge Length", min=100, default=20000, suffix="mm")
+    bridge_width = vkt.NumberField("Bridge Width", min=100, default=4500, suffix="mm")
+    bridge_height = vkt.NumberField("Bridge Height", min=100, default=3000, suffix="mm")
+    n_divisions = vkt.NumberField("Number of Divisions", min=2, default=4)
     
     line_break = vkt.LineBreak()
     
     section_title = vkt.Text('''## Cross-Section  
-Please select a cross section size for the truss members:''')
+Please select a cross section size for the bridge members:''')
     cross_section = vkt.OptionField(
         "Cross-Section Size", 
-        options=["SHS50x4", "SHS75x4", "SHS100x4", "SHS150x4"], 
-        default="SHS50x4"
+        options=["HSS200×200×8", "HSS250×250×10", "HSS300×300×12", "HSS350×350×16"], 
+        default="HSS200×200×8"
     )
     
     line_break_2 = vkt.LineBreak()
     
     export_title = vkt.Text("## Export Geometry")
-    download_btn = vkt.DownloadButton("Download Truss Geometry (JSON)", method="download_geometry_json")
+    download_btn = vkt.DownloadButton("Download Bridge Geometry (JSON)", method="download_geometry_json")
 
 
 class Controller(vkt.Controller):
     parametrization = Parametrization
 
     def download_geometry_json(self, params, **kwargs):
-        """Download truss geometry as JSON file."""
+        """Download bridge geometry as JSON file."""
         # Convert from mm to m for beam calculation
         beam = RectangularTrussBeam(
-            length=params.truss_length / 1000,
-            width=params.truss_width / 1000,
-            height=params.truss_height / 1000,
+            length=params.bridge_length / 1000,
+            width=params.bridge_width / 1000,
+            height=params.bridge_height / 1000,
             n_diagonals=int(params.n_divisions),
         )
         
@@ -85,15 +86,15 @@ class Controller(vkt.Controller):
         nodes, lines = beam.clean_model()
         nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
         
-        # Parse cross-section size (e.g., "SHS50x4" -> 50)
-        cs_size_mm = float(params.cross_section.replace("SHS", "").split("x")[0])
+        # Parse cross-section size (e.g., "HSS200×200×8" -> 200)
+        cs_size_mm = float(params.cross_section.replace("HSS", "").split("×")[0])
         
         # Prepare JSON data structure (convert node coordinates to mm)
         json_data = {
             "parameters": {
-                "truss_length_mm": params.truss_length,
-                "truss_width_mm": params.truss_width,
-                "truss_height_mm": params.truss_height,
+                "bridge_length_mm": params.bridge_length,
+                "bridge_width_mm": params.bridge_width,
+                "bridge_height_mm": params.bridge_height,
                 "n_divisions": int(params.n_divisions),
                 "cross_section_mm": cs_size_mm
             },
@@ -111,16 +112,16 @@ class Controller(vkt.Controller):
         json_string = json.dumps(json_data, indent=2)
         
         # Create file and return download result with descriptive name
-        filename = f"truss_{int(params.truss_length)}x{int(params.truss_width)}x{int(params.truss_height)}_{params.cross_section}.json"
+        filename = f"bridge_{int(params.bridge_length)}x{int(params.bridge_width)}x{int(params.bridge_height)}_{params.cross_section}.json"
         json_file = vkt.File.from_data(json_string)
         return vkt.DownloadResult(json_file, filename)
     
     @vkt.GeometryView("3D Model", x_axis_to_right=True)
     def create_render(self, params, **kwargs):
         beam = RectangularTrussBeam(
-            length=params.truss_length / 1000,
-            width=params.truss_width / 1000,
-            height=params.truss_height / 1000,
+            length=params.bridge_length / 1000,
+            width=params.bridge_width / 1000,
+            height=params.bridge_height / 1000,
             n_diagonals=int(params.n_divisions),
         )
 
@@ -129,11 +130,11 @@ class Controller(vkt.Controller):
         nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
 
         # Cross-section (meters)
-        cs_size = float(params.cross_section.replace("SHS", "").split("x")[0]) / 1000
+        cs_size = float(params.cross_section.replace("HSS", "").split("×")[0]) / 1000
 
         # --- Detect which node axis is width / height in the beam output ---
-        target_w = params.truss_width / 1000
-        target_h = params.truss_height / 1000
+        target_w = params.bridge_width / 1000
+        target_h = params.bridge_height / 1000
 
         ys = [n["y"] for n in nodes.values()]
         zs = [n["z"] for n in nodes.values()]
@@ -153,41 +154,30 @@ class Controller(vkt.Controller):
                 return Point(n["x"], n["y"], n["z"])  # (x, width, height)
             return Point(n["x"], n["z"], n["y"])      # swap (y<->z) => (x, width, height)
 
-        # --- Build truss geometry ---
+        # --- Build bridge truss geometry ---
         sections_group = []
+        bridge_material = Material(color=vkt.Color.from_hex("#C41E3A"), roughness=0.8, metalness=0.3)
         for line_id, line_data in lines.items():
             ni = nodes[line_data["NodeI"]]
             nj = nodes[line_data["NodeJ"]]
             pi = to_vkt_point(ni)
             pj = to_vkt_point(nj)
             sections_group.append(
-                RectangularExtrusion(cs_size, cs_size, Line(pi, pj), identifier=str(line_id))
+                RectangularExtrusion(cs_size, cs_size, Line(pi, pj), identifier=str(line_id), material=bridge_material)
             )
 
-
-        sections_group = []
-        truss_material = Material(color=vkt.Color.from_hex("#C41E3A"), roughness=0.8, metalness=0.3)
-        for line_id, line_data in lines.items():
-            ni = nodes[line_data["NodeI"]]
-            nj = nodes[line_data["NodeJ"]]
-            pi = to_vkt_point(ni)
-            pj = to_vkt_point(nj)
-            sections_group.append(
-                RectangularExtrusion(cs_size, cs_size, Line(pi, pj), identifier=str(line_id), material=truss_material)
-            )
-
-        height =  params.truss_height/1000
+        height = params.bridge_height / 1000
         concrete_material = Material(color=vkt.Color(80, 80, 80), roughness=0.9, metalness=0.1)
-        node2 = vkt.Point(-0.4, -params.truss_width/1000, -height/2 + cs_size)
-        node1 = vkt.Point(-0.400, 2*params.truss_width/1000, -height/2 + cs_size)
+        node2 = vkt.Point(-0.4, -params.bridge_width/1000, -height/2 + cs_size)
+        node1 = vkt.Point(-0.400, 2*params.bridge_width/1000, -height/2 + cs_size)
         center_line = vkt.Line(node1, node2)
         profile = notched_profile(width=1.000,height=height , notch=cs_size)
         solid = vkt.Extrusion(profile, center_line, profile_rotation=0, material=concrete_material)
 
         sections_group.append(vkt.Group([solid, center_line]))
         
-        node1 = vkt.Point(params.truss_length/1000+ 0.4, -params.truss_width/1000, -height/2 + cs_size) 
-        node2 = vkt.Point(params.truss_length/1000+ 0.400, 2*params.truss_width/1000, -height/2 + cs_size)
+        node1 = vkt.Point(params.bridge_length/1000 + 0.4, -params.bridge_width/1000, -height/2 + cs_size) 
+        node2 = vkt.Point(params.bridge_length/1000 + 0.400, 2*params.bridge_width/1000, -height/2 + cs_size)
         center_line = vkt.Line(node1, node2)
 
         profile = notched_profile(width=1.000, height=height, notch=cs_size)
@@ -197,8 +187,8 @@ class Controller(vkt.Controller):
 
         # --- Add bridge deck ---
         deck_thickness = 0.2  # meters
-        deck_length = params.truss_length / 1000
-        deck_width = params.truss_width / 1000
+        deck_length = params.bridge_length / 1000
+        deck_width = params.bridge_width / 1000
         
         deck_material = Material(color=vkt.Color(100, 100, 100), roughness=0.9, metalness=0.1)
         deck = SquareBeam(deck_length, deck_width, deck_thickness, material=deck_material)
@@ -214,14 +204,14 @@ class Controller(vkt.Controller):
 
         return vkt.GeometryResult(sections_group)
 
-    @vkt.DataView("Truss Information")
+    @vkt.DataView("Bridge Information")
     def visualize_data(self, params, **kwargs):
-        """Display truss geometry information and statistics."""
+        """Display bridge geometry information and statistics."""
         # Convert from mm to m for beam calculation
         beam = RectangularTrussBeam(
-            length=params.truss_length / 1000,
-            width=params.truss_width / 1000,
-            height=params.truss_height / 1000,
+            length=params.bridge_length / 1000,
+            width=params.bridge_width / 1000,
+            height=params.bridge_height / 1000,
             n_diagonals=int(params.n_divisions),
         )
         
@@ -231,7 +221,7 @@ class Controller(vkt.Controller):
         nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
         
         # Parse cross-section size
-        cs_size_mm = float(params.cross_section.replace("SHS", "").split("x")[0])
+        cs_size_mm = float(params.cross_section.replace("HSS", "").split("×")[0])
         
         # Calculate total member length
         total_length = 0
@@ -246,9 +236,9 @@ class Controller(vkt.Controller):
         # Create data structure
         data = vkt.DataGroup(
             geometry_params=vkt.DataItem('Geometry Parameters', '', subgroup=vkt.DataGroup(
-                length=vkt.DataItem('Length', params.truss_length, suffix='mm'),
-                width=vkt.DataItem('Width', params.truss_width, suffix='mm'),
-                height=vkt.DataItem('Height', params.truss_height, suffix='mm'),
+                length=vkt.DataItem('Length', params.bridge_length, suffix='mm'),
+                width=vkt.DataItem('Width', params.bridge_width, suffix='mm'),
+                height=vkt.DataItem('Height', params.bridge_height, suffix='mm'),
                 divisions=vkt.DataItem('Number of Divisions', int(params.n_divisions))
             )),
             model_stats=vkt.DataItem('Model Statistics', '', subgroup=vkt.DataGroup(
