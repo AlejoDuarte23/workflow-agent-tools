@@ -207,34 +207,82 @@ class RectangularTrussBeam(Component):
         self,
         chord_tl_ids: list[int],
         chord_tr_ids: list[int],
-    ) -> tuple[
-        Annotated[dict[int, NodeDict], "Dictionary of node IDs after removing top edge nodes"],
-        Annotated[dict[int, LineDict], "Dictionary of line IDs after removing connected lines"],
-    ]:
-        """Remove the first and last nodes of the top chords and their connected lines."""
-        # Get the 4 top edge node IDs (first and last of each top chord)
+    ) -> tuple[dict[int, NodeDict], dict[int, LineDict]]:
+        """
+        Remove the first and last nodes of the top chords and their connected lines.
+        Then add end "stitch" members so the remaining top-end nodes stay connected
+        for both odd and even n_diagonals.
+        """
+        if len(chord_tl_ids) < 3 or len(chord_tr_ids) < 3:
+            raise ValueError("Need at least 3 nodes per top chord to remove end nodes safely.")
+
+        # 4 corner top nodes to remove
         nodes_to_remove = {
-            chord_tl_ids[0],   # Top-left first node
-            chord_tl_ids[-1],  # Top-left last node
-            chord_tr_ids[0],   # Top-right first node
-            chord_tr_ids[-1],  # Top-right last node
+            chord_tl_ids[0],
+            chord_tl_ids[-1],
+            chord_tr_ids[0],
+            chord_tr_ids[-1],
         }
 
-        # Remove lines connected to these nodes
-        lines_to_remove = []
+        # Remove lines connected to removed nodes
+        lines_to_remove: list[int] = []
         for line_tag, line in self.lines.items():
             if line["NodeI"] in nodes_to_remove or line["NodeJ"] in nodes_to_remove:
                 lines_to_remove.append(line_tag)
-
-        for line_tag in lines_to_remove:
-            del self.lines[line_tag]
+        for lt in lines_to_remove:
+            del self.lines[lt]
 
         # Remove the nodes
-        for node_id in nodes_to_remove:
-            if node_id in self.nodes:
-                del self.nodes[node_id]
+        for nid in nodes_to_remove:
+            self.nodes.pop(nid, None)
+
+        # Remaining end nodes on top chords (new ends after deletion)
+        tl_left_keep = chord_tl_ids[1]
+        tl_right_keep = chord_tl_ids[-2]
+        tr_left_keep = chord_tr_ids[1]
+        tr_right_keep = chord_tr_ids[-2]
+
+        eps = 1e-9
+
+        def find_node_id(x: float, y: float, z: float) -> int | None:
+            for node_id, n in self.nodes.items():
+                if (
+                    abs(n["x"] - x) <= eps
+                    and abs(n["y"] - y) <= eps
+                    and abs(n["z"] - z) <= eps
+                ):
+                    return node_id
+            return None
+
+        def has_member(a: int, b: int) -> bool:
+            aa, bb = (a, b) if a < b else (b, a)
+            for ln in self.lines.values():
+                i, j = ln["NodeI"], ln["NodeJ"]
+                ii, jj = (i, j) if i < j else (j, i)
+                if ii == aa and jj == bb:
+                    return True
+            return False
+
+        def add_member(a: int | None, b: int | None) -> None:
+            if a is None or b is None or a == b:
+                return
+            if not has_member(a, b):
+                self.lines[self.create_line_tag()] = {"NodeI": a, "NodeJ": b}
+
+        # Bottom end nodes by geometry
+        bl_left = find_node_id(0.0, 0.0, 0.0)
+        br_left = find_node_id(0.0, self.width, 0.0)
+        bl_right = find_node_id(self.length, 0.0, 0.0)
+        br_right = find_node_id(self.length, self.width, 0.0)
+
+        # Stitch diagonals on the side faces (y=0 and y=width)
+        add_member(bl_left, tl_left_keep)
+        add_member(bl_right, tl_right_keep)
+        add_member(br_left, tr_left_keep)
+        add_member(br_right, tr_right_keep)
 
         return self.nodes, self.lines
+
 
 
 if __name__ == "__main__":
