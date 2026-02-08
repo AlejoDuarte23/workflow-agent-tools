@@ -1,5 +1,4 @@
 import plotly.graph_objects as go
-import numpy as np
 
 from app.types import NodesInfoDict, LinesInfoDict, MembersDict, CrossSectionsDict
 
@@ -33,21 +32,28 @@ def plot_model_3d(
     yb = [y_center - half_range, y_center + half_range]
     zb = [z_center - half_range, z_center + half_range]
 
-    fig.add_trace(go.Scatter3d(
-        x=[xb[0], xb[1], xb[0], xb[1], xb[0], xb[1], xb[0], xb[1]],
-        y=[yb[0], yb[0], yb[1], yb[1], yb[0], yb[0], yb[1], yb[1]],
-        z=[zb[0], zb[0], zb[0], zb[0], zb[1], zb[1], zb[1], zb[1]],
-        mode='markers',
-        marker=dict(size=0, color='rgba(0,0,0,0)'),  # Make markers invisible
-        showlegend=False,
-        hoverinfo='none'
-    ))
+    fig.add_trace(
+        go.Scatter3d(
+            x=[xb[0], xb[1], xb[0], xb[1], xb[0], xb[1], xb[0], xb[1]],
+            y=[yb[0], yb[0], yb[1], yb[1], yb[0], yb[0], yb[1], yb[1]],
+            z=[zb[0], zb[0], zb[0], zb[0], zb[1], zb[1], zb[1], zb[1]],
+            mode="markers",
+            marker=dict(size=0, color="rgba(0,0,0,0)"),  # Make markers invisible
+            showlegend=False,
+            hoverinfo="none",
+        )
+    )
 
     # Draw green spheres for nodes
     fig.add_trace(
         go.Scatter3d(
-            x=x_nodes, y=y_nodes, z=z_nodes, mode="markers",
-            marker=dict(size=6, color="green"), hoverinfo="text", showlegend=False,
+            x=x_nodes,
+            y=y_nodes,
+            z=z_nodes,
+            mode="markers",
+            marker=dict(size=6, color="green"),
+            hoverinfo="text",
+            showlegend=False,
         )
     )
 
@@ -69,7 +75,7 @@ def plot_model_3d(
 
     fig.update_layout(
         scene=dict(
-            aspectmode='data',
+            aspectmode="data",
             xaxis_visible=False,
             yaxis_visible=False,
             zaxis_visible=False,

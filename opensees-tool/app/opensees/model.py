@@ -1,4 +1,3 @@
-
 import openseespy.opensees as ops
 from app.types import (
     Vec3,
@@ -19,8 +18,6 @@ from collections import defaultdict
 from typing import DefaultDict, Annotated
 
 
-
-
 class Model:
     def __init__(
         self,
@@ -28,8 +25,12 @@ class Model:
         lines: LinesDict,
         cross_sections: CrossSectionsDict,
         members: MembersDict,
-        support_nodes: Annotated[list[int] | None, "Node IDs to fix as supports"] = None,
-        load_cases: Annotated[list[LoadCase] | None, "List of load cases to apply"] = None,
+        support_nodes: Annotated[
+            list[int] | None, "Node IDs to fix as supports"
+        ] = None,
+        load_cases: Annotated[
+            list[LoadCase] | None, "List of load cases to apply"
+        ] = None,
     ) -> None:
         self.nodes = nodes
         self.lines = lines
@@ -77,7 +78,6 @@ class Model:
         )
         ops.beamIntegration("Lobatto", section_id, section_id, N)
 
-
     def get_support_nodes(self, nodes_dict: NodesDict) -> list[int]:
         """
         Get node IDs where z-coordinate equals 0.
@@ -90,17 +90,19 @@ class Model:
 
     def assign_support(self, support_nodes: list[int] | None = None) -> None:
         """Assign fixed supports to specified nodes.
-        
+
         Args:
             support_nodes: List of node IDs to fix. If None, uses self.support_nodes.
         """
-        nodes_to_fix = support_nodes if support_nodes is not None else self.support_nodes
+        nodes_to_fix = (
+            support_nodes if support_nodes is not None else self.support_nodes
+        )
         for node_tag in nodes_to_fix:
             ops.fix(node_tag, 1, 1, 1, 1, 1, 1)
 
     def create_beam_elements(
         self,
-        z_global: Vec3 = (0,0,1),
+        z_global: Vec3 = (0, 0, 1),
         N: int = 10,
         verbose: bool = False,
     ) -> None:
@@ -114,12 +116,11 @@ class Model:
             line_id = member["line_id"]
             section_id = member["cross_section_id"]
             material_name = member["material_name"]
-            
+
             # Geometry
             line = self.lines[line_id]
             node_i = self.nodes[line["Ni"]]
             node_j = self.nodes[line["Nj"]]
-
 
             xi: Vec3 = (node_i["x"], node_i["y"], node_i["z"])
             xj: Vec3 = (node_j["x"], node_j["y"], node_j["z"])
@@ -128,8 +129,8 @@ class Model:
 
             # Material
             material = self.materials[material_name]
-            E,G,gamma = material.E, material.G, material.gamma
-                # Elastic member -> rotation = 0
+            E, G, gamma = material.E, material.G, material.gamma
+            # Elastic member -> rotation = 0
             if section_id not in section_set:
                 self._define_elastic_section(section_id, 0, E, G, N)
                 section_set.add(section_id)
@@ -144,19 +145,18 @@ class Model:
                 # non-zero cross-product, apply vec_xz
                 # the nested check for purely horizontal Z stays the same
                 if node_i["z"] - node_j["z"] == 0.0:
-
                     ops.geomTransf("Linear", line_id, *vec_xz)
                 else:
                     # We can implement the logic for truss element (diagonal elements)
                     ops.geomTransf("Linear", line_id, *vec_xz)
-                    
+
                     # Element
             ops.element(
                 "forceBeamColumn",
                 line_id,
                 node_i["id"],
                 node_j["id"],
-                line_id, # geom tranformation
+                line_id,  # geom tranformation
                 section_id,
             )
 
@@ -176,12 +176,12 @@ class Model:
                 print(
                     f"Line {line_id}: section {section_id}, "
                     f"nodes {node_i['id']}–{node_j['id']}",
-                    f"Cross Section name: {self.cross_sections[section_id]["name"]}"
+                    f"Cross Section name: {self.cross_sections[section_id]['name']}",
                 )
-    
+
     def create_loads(self, q_factor: float = 1.0, wl_factor: float = 1.0):
         """Create self weight load and apply load cases with specified factors.
-        
+
         Args:
             q_factor: Factor for gravitational loads (Q). Default 1.0.
             wl_factor: Factor for wind loads (WL). Positive = +WL, Negative = -WL.
@@ -190,7 +190,7 @@ class Model:
         self.loadsDict = defaultdict(
             lambda: {"fx": 0.0, "fy": 0.0, "fz": 0.0, "mx": 0.0, "my": 0.0, "mz": 0.0}
         )
-        
+
         # Add self-weight loads (SLS - always applied)
         for nodetag, mass_values in self.mass.items():
             # Mass in opensees is N/g * g to loads (negative z = downward)
@@ -199,7 +199,7 @@ class Model:
         # Apply load cases with appropriate factors based on their name
         for load_case in self.load_cases:
             case_name = load_case.get("name", "").lower()
-            
+
             # Determine the factor to apply based on load case type
             if "dead" in case_name or "gravity" in case_name or case_name == "q":
                 factor = q_factor
@@ -208,7 +208,7 @@ class Model:
             else:
                 # For other load cases, use their original factor
                 factor = load_case.get("factor", 1.0)
-            
+
             for load in load_case["loads"]:
                 node_id = load["node_id"]
                 self.loadsDict[node_id]["fx"] += load["fx"] * factor
@@ -230,11 +230,10 @@ class Model:
                 load_components["mz"],
             )
 
-
     def create_model(self):
         ops.wipe()
         # Creates Opensees Model
-        ops.model('basic','-ndm',3,'-ndf',6)
+        ops.model("basic", "-ndm", 3, "-ndf", 6)
         # Create nodes
         self.create_nodes()
         # ops.getNodeTags()
@@ -246,7 +245,7 @@ class Model:
 
     def run_model(self, q_factor: float = 1.0, wl_factor: float = 1.0):
         """Run the OpenSees analysis with specified load factors.
-        
+
         Args:
             q_factor: Factor for gravitational loads (Q). Default 1.0.
             wl_factor: Factor for wind loads (WL). Positive = +WL, Negative = -WL.
@@ -255,40 +254,41 @@ class Model:
         ops.pattern("Plain", 1, 1)
         self.create_loads(q_factor=q_factor, wl_factor=wl_factor)
 
-        ops.system('BandGen')
-        ops.constraints('Plain')
-        ops.numberer('Plain')
-        ops.algorithm('Linear')
-        ops.integrator('LoadControl',1)
-        ops.analysis('Static')
+        ops.system("BandGen")
+        ops.constraints("Plain")
+        ops.numberer("Plain")
+        ops.algorithm("Linear")
+        ops.integrator("LoadControl", 1)
+        ops.analysis("Static")
         ops.analyze(1)
         ops.reactions()
         return ops
 
     def run_combination(self, combination: LoadCombination) -> CombinationResult:
         """Run a single load combination and return results.
-        
+
         Args:
             combination: LoadCombination with name, Q_factor, and WL_factor.
-            
+
         Returns:
             CombinationResult with displacements and max absolute displacement.
         """
         # Recreate the model (wipe and rebuild)
         self.create_model()
-        
+
         # Run with the combination factors
         self.run_model(
-            q_factor=combination["Q_factor"],
-            wl_factor=combination["WL_factor"]
+            q_factor=combination["Q_factor"], wl_factor=combination["WL_factor"]
         )
-        
+
         # Calculate displacements
         max_disp_by_type, disp_dict = calculate_displacements(self.lines, self.nodes)
-        
+
         # Calculate max absolute displacement (using dz component)
-        max_abs_disp = max(abs(d["dz"]) for d in disp_dict.values()) if disp_dict else 0.0
-        
+        max_abs_disp = (
+            max(abs(d["dz"]) for d in disp_dict.values()) if disp_dict else 0.0
+        )
+
         return {
             "combination_name": combination["name"],
             "max_disp_by_type": max_disp_by_type,
@@ -297,31 +297,29 @@ class Model:
         }
 
     def run_all_combinations(
-        self, 
-        combinations: list[LoadCombination] | None = None
+        self, combinations: list[LoadCombination] | None = None
     ) -> tuple[CombinationResult, list[CombinationResult]]:
         """Run all SLS load combinations and find the critical one.
-        
+
         Args:
             combinations: List of LoadCombination to run. If None, uses SLS_COMBINATIONS.
-            
+
         Returns:
-            Tuple of (critical_result, all_results) where critical_result is the 
+            Tuple of (critical_result, all_results) where critical_result is the
             combination with the highest absolute displacement.
         """
         if combinations is None:
             combinations = SLS_COMBINATIONS
-        
+
         all_results: list[CombinationResult] = []
-        
+
         for combo in combinations:
             result = self.run_combination(combo)
             all_results.append(result)
-        
-        critical_result = find_critical_combination(all_results)
-        
-        return critical_result, all_results
 
+        critical_result = find_critical_combination(all_results)
+
+        return critical_result, all_results
 
     def __repr__(self) -> str:
         unique_cc = {cs["name"] for cs in self.cross_sections.values()}
@@ -332,20 +330,20 @@ class Model:
             f"NoMembers={len(self.members)}, "
             f"CrossSections={format_names})>"
         )
-    
 
-def calculate_displacements(lines:LinesDict, nodes:NodesDict):
+
+def calculate_displacements(lines: LinesDict, nodes: NodesDict):
     """Calculate displacements for all nodes in x, y, z directions.
-    
+
     Returns:
         max_disp_by_type: Dict mapping element type to max z-displacement.
         disp_dict: Dict mapping node ID to displacement dict with dx, dy, dz.
     """
     from app.types import DispDict
-    
+
     disp_by_type: DefaultDict[str, list[float]] = defaultdict(list)
     disp_dict: DispDict = {}
-    
+
     for lineargs in lines.values():
         for node in (lineargs["Ni"], lineargs["Nj"]):
             disp = ops.nodeDisp(node)
@@ -358,8 +356,10 @@ def calculate_displacements(lines:LinesDict, nodes:NodesDict):
                     "dy": disp[1],
                     "dz": disp[2],
                 }
-                        
-    max_disp_by_type = {eletype: min(disp_list) for eletype, disp_list in disp_by_type.items()}   
+
+    max_disp_by_type = {
+        eletype: min(disp_list) for eletype, disp_list in disp_by_type.items()
+    }
 
     for node in nodes:
         disp = ops.nodeDisp(node)
@@ -370,4 +370,3 @@ def calculate_displacements(lines:LinesDict, nodes:NodesDict):
         }
 
     return max_disp_by_type, disp_dict
-

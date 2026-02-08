@@ -3,6 +3,7 @@ from typing import TypedDict, Annotated, Literal, Union
 
 class NodeDict(TypedDict):
     """Node coordinates in 3D space."""
+
     x: float
     y: float
     z: float
@@ -10,6 +11,7 @@ class NodeDict(TypedDict):
 
 class LineDict(TypedDict):
     """Line connectivity between two nodes."""
+
     NodeI: int
     NodeJ: int
 
@@ -29,6 +31,7 @@ class LineInfo(TypedDict):
 
 
 MemberType = Literal["Truss Diagonal", "Joist", "Beam", "Column", "Truss Chord"]
+
 
 class CrossSectionInfo(TypedDict):
     name: str
@@ -55,6 +58,7 @@ class NodeMass(TypedDict):
 
 class NodalLoad(TypedDict):
     """Nodal load with forces and moments."""
+
     node_id: int
     fx: Annotated[float, "Force in x direction (N)"]
     fy: Annotated[float, "Force in y direction (N)"]
@@ -66,6 +70,7 @@ class NodalLoad(TypedDict):
 
 class LoadCase(TypedDict):
     """Load case with name, factor, and list of nodal loads."""
+
     name: str
     factor: Annotated[float, "Load factor for combinations"]
     loads: list[NodalLoad]
@@ -97,7 +102,7 @@ class Concrete:
     gamma: float = 2.5 * 10**-5
     E: float = 26_700.0
     units: Literal["N,mm"] = "N,mm"
-    G: float     = E / (2 * 1.2)
+    G: float = E / (2 * 1.2)
 
 
 MaterialName = Literal["Steel", "Concrete"]
@@ -109,14 +114,17 @@ material_dict: MaterialDictType = {
     "Concrete": Concrete(),
 }
 
-steel_cost: float = 3.81 # Euros
+steel_cost: float = 3.81  # Euros
 
 
 class LoadCombination(TypedDict):
     """Load combination with factors for Q (gravitational) and WL (wind) loads."""
+
     name: str
     Q_factor: Annotated[float, "Factor for gravitational load (Q)"]
-    WL_factor: Annotated[float, "Factor for wind load (WL). Positive = +WL, Negative = -WL"]
+    WL_factor: Annotated[
+        float, "Factor for wind load (WL). Positive = +WL, Negative = -WL"
+    ]
 
 
 # SLS Load Combinations (SLS = self-weight is always included)
@@ -133,6 +141,7 @@ SLS_COMBINATIONS: list[LoadCombination] = [
 
 class NodeDisplacement(TypedDict):
     """Displacement at a node in all 3 directions."""
+
     dx: float
     dy: float
     dz: float
@@ -143,6 +152,7 @@ DispDict = dict[int, NodeDisplacement]
 
 class CombinationResult(TypedDict):
     """Result from running a load combination analysis."""
+
     combination_name: str
     max_disp_by_type: dict[str, float]
     disp_dict: DispDict
