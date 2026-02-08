@@ -2,10 +2,12 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 
-from app.types import MemberType
 Vec3 = np.ndarray
 
-def compute_beam_vertices_rect(A: Vec3, B: Vec3, width: float, height: float) -> np.ndarray:
+
+def compute_beam_vertices_rect(
+    A: Vec3, B: Vec3, width: float, height: float
+) -> np.ndarray:
     """Compute the 8 vertices of a rectangular beam between points A and B."""
     v = B - A
     length = np.linalg.norm(v)
@@ -24,14 +26,31 @@ def compute_beam_vertices_rect(A: Vec3, B: Vec3, width: float, height: float) ->
     local_y *= width / 2.0
     local_z *= height / 2.0
 
-    v0, v1, v2, v3 = A + local_y + local_z, A + local_y - local_z, A - local_y - local_z, A - local_y + local_z
-    v4, v5, v6, v7 = B + local_y + local_z, B + local_y - local_z, B - local_y - local_z, B - local_y + local_z
+    v0, v1, v2, v3 = (
+        A + local_y + local_z,
+        A + local_y - local_z,
+        A - local_y - local_z,
+        A - local_y + local_z,
+    )
+    v4, v5, v6, v7 = (
+        B + local_y + local_z,
+        B + local_y - local_z,
+        B - local_y - local_z,
+        B - local_y + local_z,
+    )
     return np.stack([v0, v1, v2, v3, v4, v5, v6, v7])
 
 
 def add_beam_mesh(fig: go.Figure, verts: np.ndarray, color: str) -> None:
     """Add a beam mesh to a Plotly figure."""
-    quads = [(0, 1, 2, 3), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+    quads = [
+        (0, 1, 2, 3),
+        (4, 5, 6, 7),
+        (0, 1, 5, 4),
+        (1, 2, 6, 5),
+        (2, 3, 7, 6),
+        (3, 0, 4, 7),
+    ]
     i_list, j_list, k_list = [], [], []
     for a, b, c, d in quads:
         i_list.extend([a, a])
@@ -82,7 +101,7 @@ def plot_deformed_mesh(
     critical_combination_name: str | None = None,
 ) -> go.Figure:
     """Return a Plotly figure of the scaled deformed shape with meshed elements.
-    
+
     Args:
         nodes: Dictionary of node data with coordinates.
         lines: Dictionary of line data with node connectivity.
@@ -92,7 +111,7 @@ def plot_deformed_mesh(
         scale: Scale factor for deformation visualization.
         critical_combination_name: Name of the critical load combination (optional).
     """
-    
+
     # Helper to get displacement component with default
     def get_disp(nid: int, component: str) -> float:
         node_disp = disp_dict.get(nid)
@@ -116,7 +135,9 @@ def plot_deformed_mesh(
         lid: (get_disp(ln["Ni"], "dz") + get_disp(ln["Nj"], "dz")) / 2.0
         for lid, ln in lines.items()
     }
-    dmin, dmax = (min(line_disp.values()), max(line_disp.values())) if line_disp else (0.0, 0.0)
+    dmin, dmax = (
+        (min(line_disp.values()), max(line_disp.values())) if line_disp else (0.0, 0.0)
+    )
 
     # ------------------------------------------------------------------ #
     # 2. Figure with bounding cube
@@ -165,7 +186,9 @@ def plot_deformed_mesh(
         A = np.array([n1["x"], n1["y"], n1["z"]])
         B = np.array([n2["x"], n2["y"], n2["z"]])
         cs = cross_sections[cs_id]
-        verts = compute_beam_vertices_rect(A, B, width=float(cs["h"]), height=float(cs["b"]))
+        verts = compute_beam_vertices_rect(
+            A, B, width=float(cs["h"]), height=float(cs["b"])
+        )
         add_beam_mesh(fig, verts, map_colour(line_disp[lid]))
 
     # nodes
@@ -229,7 +252,7 @@ def plot_deformed_mesh(
         resultant = np.sqrt(dx**2 + dy**2 + dz**2)
         if resultant > max_resultant:
             max_resultant = resultant
-    
+
     # Build annotation text with critical combination if provided
     if critical_combination_name:
         annotation_text = (
@@ -238,7 +261,7 @@ def plot_deformed_mesh(
         )
     else:
         annotation_text = f"<b>Max Resultant Deformation</b><br>{max_resultant:.3f} mm"
-    
+
     fig.add_annotation(
         text=annotation_text,
         xref="paper",

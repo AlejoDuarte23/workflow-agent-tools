@@ -70,7 +70,9 @@ class RectangularTrussBeam(Component):
             # Even number of diagonals
             top_indices = chord_a_ids[::2]
             bottom_indices = chord_b_ids[1:-1:2]
-            tags_a = sorted([top_indices[0]] + [top_indices[-1]] + top_indices[1:-1] * 2)
+            tags_a = sorted(
+                [top_indices[0]] + [top_indices[-1]] + top_indices[1:-1] * 2
+            )
             tags_b = sorted(bottom_indices[:] * 2)
             for tag_a, tag_b in zip(tags_a, tags_b):
                 self.lines[self.create_line_tag()] = {
@@ -89,16 +91,20 @@ class RectangularTrussBeam(Component):
                     "NodeJ": tag_b,
                 }
 
-    def create_vertical_bracing(self, chord_a_ids: list[int], chord_b_ids: list[int]) -> None:
+    def create_vertical_bracing(
+        self, chord_a_ids: list[int], chord_b_ids: list[int]
+    ) -> None:
         """Create vertical bracing (struts) between two chords at even indices."""
         for i, (tag_a, tag_b) in enumerate(zip(chord_a_ids, chord_b_ids)):
-            #if i % 2 == 0:
+            # if i % 2 == 0:
             self.lines[self.create_line_tag()] = {
                 "NodeI": tag_a,
                 "NodeJ": tag_b,
             }
 
-    def build(self) -> tuple[
+    def build(
+        self,
+    ) -> tuple[
         Annotated[dict[int, NodeDict], "Dictionary of node IDs to node coordinates"],
         Annotated[dict[int, LineDict], "Dictionary of line IDs to line connectivity"],
         Annotated[list[int], "List of top-left chord node IDs"],
@@ -149,8 +155,12 @@ class RectangularTrussBeam(Component):
 
         return self.nodes, self.lines, chord_tl_ids, chord_tr_ids
 
-    def clean_model(self) -> tuple[
-        Annotated[dict[int, NodeDict], "Dictionary of deduplicated node IDs to coordinates"],
+    def clean_model(
+        self,
+    ) -> tuple[
+        Annotated[
+            dict[int, NodeDict], "Dictionary of deduplicated node IDs to coordinates"
+        ],
         Annotated[dict[int, LineDict], "Dictionary of valid line IDs to connectivity"],
     ]:
         """Remove duplicate nodes and zero-length lines."""
@@ -203,7 +213,6 @@ class RectangularTrussBeam(Component):
         self.lines = unique_lines
         return self.nodes, self.lines
 
-
     def remove_top_edge_nodes(
         self,
         chord_tl_ids: list[int],
@@ -215,7 +224,9 @@ class RectangularTrussBeam(Component):
         for both odd and even n_diagonals.
         """
         if len(chord_tl_ids) < 3 or len(chord_tr_ids) < 3:
-            raise ValueError("Need at least 3 nodes per top chord to remove end nodes safely.")
+            raise ValueError(
+                "Need at least 3 nodes per top chord to remove end nodes safely."
+            )
 
         # 4 corner top nodes to remove
         nodes_to_remove = {

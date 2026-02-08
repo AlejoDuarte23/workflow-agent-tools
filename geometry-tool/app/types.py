@@ -4,6 +4,7 @@ from typing import TypedDict, Annotated, Literal, Union
 # Geometry Types (used for truss beam generation)
 class NodeDict(TypedDict):
     """Node coordinates in 3D space."""
+
     x: float
     y: float
     z: float
@@ -11,6 +12,7 @@ class NodeDict(TypedDict):
 
 class LineDict(TypedDict):
     """Line connectivity between two nodes."""
+
     NodeI: int
     NodeJ: int
 

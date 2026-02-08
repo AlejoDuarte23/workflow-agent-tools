@@ -13,7 +13,9 @@ PASTEL_PALETTE = [
 ]
 
 
-def compute_beam_vertices_rect(A: Vec3, B: Vec3, width: float, height: float) -> np.ndarray:
+def compute_beam_vertices_rect(
+    A: Vec3, B: Vec3, width: float, height: float
+) -> np.ndarray:
     v = B - A
     length = np.linalg.norm(v)
     if length == 0:
@@ -99,10 +101,7 @@ def add_beam_mesh(fig: go.Figure, verts: np.ndarray, color: str) -> None:
 
 
 def compute_cylinder_mesh(
-    base_center: Vec3,
-    height: float,
-    radius: float,
-    segments: int = 16
+    base_center: Vec3, height: float, radius: float, segments: int = 16
 ) -> tuple[np.ndarray, list[int], list[int], list[int]]:
     """Return verts and faces for a vertical cylinder pointing down from base_center."""
     theta = np.linspace(0, 2 * np.pi, segments, endpoint=False)
@@ -111,7 +110,9 @@ def compute_cylinder_mesh(
     # top circle at z = base_z
     top = np.vstack([base_center + np.array([x, y, 0]) for x, y in zip(xs, ys)])
     # bottom circle at z = base_z - height
-    bottom = np.vstack([base_center + np.array([x, y, -height]) for x, y in zip(xs, ys)])
+    bottom = np.vstack(
+        [base_center + np.array([x, y, -height]) for x, y in zip(xs, ys)]
+    )
     verts = np.vstack([top, bottom])
     i_list = []
     j_list = []
@@ -130,10 +131,7 @@ def compute_cylinder_mesh(
 
 
 def compute_cone_mesh(
-    base_center: Vec3,
-    height: float,
-    radius: float,
-    segments: int = 16
+    base_center: Vec3, height: float, radius: float, segments: int = 16
 ) -> tuple[np.ndarray, list[int], list[int], list[int]]:
     """Return verts and faces for a downward‐pointing cone at base_center."""
     theta = np.linspace(0, 2 * np.pi, segments, endpoint=False)
@@ -186,21 +184,28 @@ def plot_loads_3d(
     yb = [y_center - half_range, y_center + half_range]
     zb = [z_center - half_range, z_center + half_range]
 
-    fig.add_trace(go.Scatter3d(
-        x=[xb[0], xb[1], xb[0], xb[1], xb[0], xb[1], xb[0], xb[1]],
-        y=[yb[0], yb[0], yb[1], yb[1], yb[0], yb[0], yb[1], yb[1]],
-        z=[zb[0], zb[0], zb[0], zb[0], zb[1], zb[1], zb[1], zb[1]],
-        mode='markers',
-        marker=dict(size=0, color='rgba(0,0,0,0)'),  # Make markers invisible
-        showlegend=False,
-        hoverinfo='none'
-    ))
+    fig.add_trace(
+        go.Scatter3d(
+            x=[xb[0], xb[1], xb[0], xb[1], xb[0], xb[1], xb[0], xb[1]],
+            y=[yb[0], yb[0], yb[1], yb[1], yb[0], yb[0], yb[1], yb[1]],
+            z=[zb[0], zb[0], zb[0], zb[0], zb[1], zb[1], zb[1], zb[1]],
+            mode="markers",
+            marker=dict(size=0, color="rgba(0,0,0,0)"),  # Make markers invisible
+            showlegend=False,
+            hoverinfo="none",
+        )
+    )
 
     # Draw green spheres for nodes
     fig.add_trace(
         go.Scatter3d(
-            x=x_nodes, y=y_nodes, z=z_nodes, mode="markers",
-            marker=dict(size=6, color="green"), hoverinfo="text", showlegend=False,
+            x=x_nodes,
+            y=y_nodes,
+            z=z_nodes,
+            mode="markers",
+            marker=dict(size=6, color="green"),
+            hoverinfo="text",
+            showlegend=False,
         )
     )
 
@@ -222,7 +227,8 @@ def plot_loads_3d(
 
     # Get nodes where z=0 (in the xy plane) for point loads
     nodes_with_load = [
-        node_id for node_id, node_data in nodes.items()
+        node_id
+        for node_id, node_data in nodes.items()
         if abs(node_data["z"]) < 1e-6  # z = 0 tolerance
     ]
 
@@ -234,32 +240,59 @@ def plot_loads_3d(
         cyl_radius, cone_radius = 0.04 * arrow_height, 0.15 * arrow_height
         for nid in nodes_with_load:
             n = nodes[nid]
-            base = np.array([n["x"], n["y"], n["z"]], float) + np.array([0.0, 0.0, arrow_height + offset])
+            base = np.array([n["x"], n["y"], n["z"]], float) + np.array(
+                [0.0, 0.0, arrow_height + offset]
+            )
             cyl_verts, ci, cj, ck = compute_cylinder_mesh(base, cyl_h, cyl_radius)
-            fig.add_trace(go.Mesh3d(
-                x=cyl_verts[:, 0], y=cyl_verts[:, 1], z=cyl_verts[:, 2],
-                i=ci, j=cj, k=ck, color="red", opacity=1.0, hoverinfo="skip", showlegend=False
-            ))
+            fig.add_trace(
+                go.Mesh3d(
+                    x=cyl_verts[:, 0],
+                    y=cyl_verts[:, 1],
+                    z=cyl_verts[:, 2],
+                    i=ci,
+                    j=cj,
+                    k=ck,
+                    color="red",
+                    opacity=1.0,
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
             cone_base = base + np.array([0.0, 0.0, -cyl_h])
             cone_verts, qi, qj, qk = compute_cone_mesh(cone_base, cone_h, cone_radius)
-            fig.add_trace(go.Mesh3d(
-                x=cone_verts[:, 0], y=cone_verts[:, 1], z=cone_verts[:, 2],
-                i=qi, j=qj, k=qk, color="red", opacity=1.0, hoverinfo="skip", showlegend=False
-            ))
+            fig.add_trace(
+                go.Mesh3d(
+                    x=cone_verts[:, 0],
+                    y=cone_verts[:, 1],
+                    z=cone_verts[:, 2],
+                    i=qi,
+                    j=qj,
+                    k=qk,
+                    color="red",
+                    opacity=1.0,
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
 
     # Add legend entry for loads if present
     if nodes_with_load and load > 0:
         fig.add_trace(
             go.Scatter3d(
-                x=[None], y=[None], z=[None], mode="markers",
+                x=[None],
+                y=[None],
+                z=[None],
+                mode="markers",
                 marker=dict(symbol="square", size=10, color="red"),
-                name=f"Load Q = {load} kPa", hoverinfo="none", showlegend=True
+                name=f"Load Q = {load} kPa",
+                hoverinfo="none",
+                showlegend=True,
             )
         )
 
     fig.update_layout(
         scene=dict(
-            aspectmode='data',
+            aspectmode="data",
             xaxis_visible=False,
             yaxis_visible=False,
             zaxis_visible=False,
@@ -269,8 +302,14 @@ def plot_loads_3d(
         paper_bgcolor="white",
         margin=dict(l=0, r=0, t=40, b=0),
         legend=dict(
-            x=0.95, y=0.05, xanchor="right", yanchor="bottom",
-            bgcolor="rgba(0,0,0,0)", borderwidth=0, itemsizing="constant", font=dict(size=16, color="black")
+            x=0.95,
+            y=0.05,
+            xanchor="right",
+            yanchor="bottom",
+            bgcolor="rgba(0,0,0,0)",
+            borderwidth=0,
+            itemsizing="constant",
+            font=dict(size=16, color="black"),
         ),
     )
 
@@ -278,10 +317,7 @@ def plot_loads_3d(
 
 
 def compute_cylinder_mesh_y(
-    base_center: Vec3,
-    length: float,
-    radius: float,
-    segments: int = 16
+    base_center: Vec3, length: float, radius: float, segments: int = 16
 ) -> tuple[np.ndarray, list[int], list[int], list[int]]:
     """Return verts and faces for a cylinder pointing in positive Y direction from base_center."""
     theta = np.linspace(0, 2 * np.pi, segments, endpoint=False)
@@ -309,10 +345,7 @@ def compute_cylinder_mesh_y(
 
 
 def compute_cone_mesh_y(
-    base_center: Vec3,
-    length: float,
-    radius: float,
-    segments: int = 16
+    base_center: Vec3, length: float, radius: float, segments: int = 16
 ) -> tuple[np.ndarray, list[int], list[int], list[int]]:
     """Return verts and faces for a cone pointing in positive Y direction at base_center."""
     theta = np.linspace(0, 2 * np.pi, segments, endpoint=False)
@@ -367,21 +400,28 @@ def plot_wind_loads_3d(
     yb = [y_center - half_range, y_center + half_range]
     zb = [z_center - half_range, z_center + half_range]
 
-    fig.add_trace(go.Scatter3d(
-        x=[xb[0], xb[1], xb[0], xb[1], xb[0], xb[1], xb[0], xb[1]],
-        y=[yb[0], yb[0], yb[1], yb[1], yb[0], yb[0], yb[1], yb[1]],
-        z=[zb[0], zb[0], zb[0], zb[0], zb[1], zb[1], zb[1], zb[1]],
-        mode='markers',
-        marker=dict(size=0, color='rgba(0,0,0,0)'),  # Make markers invisible
-        showlegend=False,
-        hoverinfo='none'
-    ))
+    fig.add_trace(
+        go.Scatter3d(
+            x=[xb[0], xb[1], xb[0], xb[1], xb[0], xb[1], xb[0], xb[1]],
+            y=[yb[0], yb[0], yb[1], yb[1], yb[0], yb[0], yb[1], yb[1]],
+            z=[zb[0], zb[0], zb[0], zb[0], zb[1], zb[1], zb[1], zb[1]],
+            mode="markers",
+            marker=dict(size=0, color="rgba(0,0,0,0)"),  # Make markers invisible
+            showlegend=False,
+            hoverinfo="none",
+        )
+    )
 
     # Draw green spheres for nodes
     fig.add_trace(
         go.Scatter3d(
-            x=x_nodes, y=y_nodes, z=z_nodes, mode="markers",
-            marker=dict(size=6, color="green"), hoverinfo="text", showlegend=False,
+            x=x_nodes,
+            y=y_nodes,
+            z=z_nodes,
+            mode="markers",
+            marker=dict(size=6, color="green"),
+            hoverinfo="text",
+            showlegend=False,
         )
     )
 
@@ -404,10 +444,13 @@ def plot_wind_loads_3d(
     # Get nodes in the ZX plane at y=0, where z is between 0 and truss_height
     # These are the nodes on the windward face
     nodes_with_wind_load = [
-        node_id for node_id, node_data in nodes.items()
-        if (abs(node_data["y"]) < 1e-6 and  # y = 0 (tolerance)
-            node_data["z"] >= -1e-6 and  # z >= 0
-            node_data["z"] <= truss_height + 1e-6)  # z <= height
+        node_id
+        for node_id, node_data in nodes.items()
+        if (
+            abs(node_data["y"]) < 1e-6  # y = 0 (tolerance)
+            and node_data["z"] >= -1e-6  # z >= 0
+            and node_data["z"] <= truss_height + 1e-6
+        )  # z <= height
     ]
 
     if nodes_with_wind_load and wind_pressure > 0:
@@ -420,30 +463,57 @@ def plot_wind_loads_3d(
             # Arrow starts offset in negative Y and points in positive Y direction
             base = np.array([n["x"], n["y"] - offset - arrow_length, n["z"]], float)
             cyl_verts, ci, cj, ck = compute_cylinder_mesh_y(base, cyl_len, cyl_radius)
-            fig.add_trace(go.Mesh3d(
-                x=cyl_verts[:, 0], y=cyl_verts[:, 1], z=cyl_verts[:, 2],
-                i=ci, j=cj, k=ck, color="blue", opacity=1.0, hoverinfo="skip", showlegend=False
-            ))
+            fig.add_trace(
+                go.Mesh3d(
+                    x=cyl_verts[:, 0],
+                    y=cyl_verts[:, 1],
+                    z=cyl_verts[:, 2],
+                    i=ci,
+                    j=cj,
+                    k=ck,
+                    color="blue",
+                    opacity=1.0,
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
             cone_base = base + np.array([0.0, cyl_len, 0.0])
-            cone_verts, qi, qj, qk = compute_cone_mesh_y(cone_base, cone_len, cone_radius)
-            fig.add_trace(go.Mesh3d(
-                x=cone_verts[:, 0], y=cone_verts[:, 1], z=cone_verts[:, 2],
-                i=qi, j=qj, k=qk, color="blue", opacity=1.0, hoverinfo="skip", showlegend=False
-            ))
+            cone_verts, qi, qj, qk = compute_cone_mesh_y(
+                cone_base, cone_len, cone_radius
+            )
+            fig.add_trace(
+                go.Mesh3d(
+                    x=cone_verts[:, 0],
+                    y=cone_verts[:, 1],
+                    z=cone_verts[:, 2],
+                    i=qi,
+                    j=qj,
+                    k=qk,
+                    color="blue",
+                    opacity=1.0,
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
 
     # Add legend entry for wind loads if present
     if nodes_with_wind_load and wind_pressure > 0:
         fig.add_trace(
             go.Scatter3d(
-                x=[None], y=[None], z=[None], mode="markers",
+                x=[None],
+                y=[None],
+                z=[None],
+                mode="markers",
                 marker=dict(symbol="square", size=10, color="blue"),
-                name=f"Wind Pressure = {wind_pressure} kPa", hoverinfo="none", showlegend=True
+                name=f"Wind Pressure = {wind_pressure} kPa",
+                hoverinfo="none",
+                showlegend=True,
             )
         )
 
     fig.update_layout(
         scene=dict(
-            aspectmode='data',
+            aspectmode="data",
             xaxis_visible=False,
             yaxis_visible=False,
             zaxis_visible=False,
@@ -453,8 +523,14 @@ def plot_wind_loads_3d(
         paper_bgcolor="white",
         margin=dict(l=0, r=0, t=40, b=0),
         legend=dict(
-            x=0.95, y=0.05, xanchor="right", yanchor="bottom",
-            bgcolor="rgba(0,0,0,0)", borderwidth=0, itemsizing="constant", font=dict(size=16, color="black")
+            x=0.95,
+            y=0.05,
+            xanchor="right",
+            yanchor="bottom",
+            bgcolor="rgba(0,0,0,0)",
+            borderwidth=0,
+            itemsizing="constant",
+            font=dict(size=16, color="black"),
         ),
     )
 

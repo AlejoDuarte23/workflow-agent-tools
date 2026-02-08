@@ -2,7 +2,17 @@ import math
 import json
 
 import viktor as vkt
-from viktor.geometry import Point, Line, RectangularExtrusion, Polygon, Material, Cone, Group, Vector, SquareBeam
+from viktor.geometry import (
+    Point,
+    Line,
+    RectangularExtrusion,
+    Polygon,
+    Material,
+    Cone,
+    Group,
+    Vector,
+    SquareBeam,
+)
 from viktor.views import Label
 from app.truss_beam import RectangularTrussBeam
 
@@ -23,8 +33,8 @@ def notched_profile(width=2000.0, height=2400.0, notch=400.0) -> list[vkt.Point]
     xL, xR = -w / 2, w / 2
     yB, yT = -h / 2, h / 2
 
-    xN = xR - n      # notch inner x
-    yN = yT - n      # notch bottom y
+    xN = xR - n  # notch inner x
+    yN = yT - n  # notch bottom y
 
     # Clockwise loop
     return [
@@ -41,7 +51,7 @@ def notched_profile(width=2000.0, height=2400.0, notch=400.0) -> list[vkt.Point]
 def create_load_arrow(origin: Point, arrow_length: float, material=None) -> Group:
     """
     Create a horizontal load arrow pointing in +Y direction.
-    
+
     Parameters:
         origin: The tip point of the arrow (where it points to)
         arrow_length: Total length of the arrow
@@ -65,19 +75,17 @@ def create_load_arrow(origin: Point, arrow_length: float, material=None) -> Grou
         cone_length,
         origin=cone_base,
         orientation=Vector(0, 1, 0),
-        material=material
+        material=material,
     )
 
     # Create shaft (rectangular extrusion)
     shaft_line = Line(shaft_start, shaft_end)
     arrow_shaft = RectangularExtrusion(
-        shaft_size,
-        shaft_size,
-        shaft_line,
-        material=material
+        shaft_size, shaft_size, shaft_line, material=material
     )
 
     return Group([arrow_head, arrow_shaft])
+
 
 def _risk_importance_factor(risk_category: str) -> float:
     """
@@ -153,7 +161,6 @@ def _velocity_pressure_kpa(
         "coeff": coeff,
         "qz_kpa": q_pa / 1000.0,
     }
-
 
 
 def _unit(vx: float, vy: float, vz: float) -> tuple[float, float, float]:
@@ -241,23 +248,36 @@ def _wind_direction() -> tuple[float, float, float]:
     """
     return _unit(0.0, 0.0, 1.0)
 
+
 class Parametrization(vkt.Parametrization):
     # Wind Load Generation
     text_1 = vkt.Text("# Wind Load Generation")
     # Site Data
     text_2 = vkt.Text("""## Site Data
 Enter the site location and elevation information""")
-    risk_category = vkt.OptionField("Risk Category", options=["I", "II", "III", "IV"], default="II")
-    site_elevation_m = vkt.NumberField("Site Elevation", suffix="m", default=138.0, min=-500, max=9000)
+    risk_category = vkt.OptionField(
+        "Risk Category", options=["I", "II", "III", "IV"], default="II"
+    )
+    site_elevation_m = vkt.NumberField(
+        "Site Elevation", suffix="m", default=138.0, min=-500, max=9000
+    )
     lb_2 = vkt.LineBreak()
 
     # Structure Data (mm)
     text_4 = vkt.Text("""## Structure Data
 Define the bridge geometry and member sizing (metric)""")
-    bridge_length = vkt.NumberField("Bridge Length, L", min=100, default=20000, suffix="mm")
-    bridge_width = vkt.NumberField("Bridge Width, B", min=100, default=4500, suffix="mm")
-    bridge_height = vkt.NumberField("Bridge Height, H", min=100, default=3000, suffix="mm")
-    roof_pitch_angle = vkt.NumberField("Roof Pitch Angle, θ", suffix="°", default=12, min=0, max=60)
+    bridge_length = vkt.NumberField(
+        "Bridge Length, L", min=100, default=20000, suffix="mm"
+    )
+    bridge_width = vkt.NumberField(
+        "Bridge Width, B", min=100, default=4500, suffix="mm"
+    )
+    bridge_height = vkt.NumberField(
+        "Bridge Height, H", min=100, default=3000, suffix="mm"
+    )
+    roof_pitch_angle = vkt.NumberField(
+        "Roof Pitch Angle, θ", suffix="°", default=12, min=0, max=60
+    )
     n_divisions = vkt.NumberField("Number of Divisions", min=1, default=4)
 
     cross_section = vkt.OptionField(
@@ -271,12 +291,22 @@ Define the bridge geometry and member sizing (metric)""")
     text_6 = vkt.Text("""## Wind Data
 Specify wind parameters (SI). Results are shown in kPa and kN.""")
 
-    exposure_category = vkt.OptionField("Exposure Category", options=["B", "C", "D"], default="C")
-    wind_speed_ms = vkt.NumberField("Basic Wind Speed, V", suffix="m/s", default=47.0, min=0, max=120)
+    exposure_category = vkt.OptionField(
+        "Exposure Category", options=["B", "C", "D"], default="C"
+    )
+    wind_speed_ms = vkt.NumberField(
+        "Basic Wind Speed, V", suffix="m/s", default=47.0, min=0, max=120
+    )
 
-    topographic_factor_kzt = vkt.NumberField("Topographic Factor, Kzt", default=1.0, min=0.5, max=2.0)
-    directionality_factor_kd = vkt.NumberField("Directionality Factor, Kd", default=0.85, min=0.5, max=1.0)
-    gust_effect_factor_g = vkt.NumberField("Gust Effect Factor, G (rigid default = 0.85)", default=0.85, min=0.5, max=1.2)
+    topographic_factor_kzt = vkt.NumberField(
+        "Topographic Factor, Kzt", default=1.0, min=0.5, max=2.0
+    )
+    directionality_factor_kd = vkt.NumberField(
+        "Directionality Factor, Kd", default=0.85, min=0.5, max=1.0
+    )
+    gust_effect_factor_g = vkt.NumberField(
+        "Gust Effect Factor, G (rigid default = 0.85)", default=0.85, min=0.5, max=1.2
+    )
 
     # Lattice framework / open-structure inputs
     text_8 = vkt.Text("## Open Truss / Lattice Framework")
@@ -292,6 +322,7 @@ Specify wind parameters (SI). Results are shown in kPa and kN.""")
 
     # Export
     download_json = vkt.DownloadButton("Download JSON", method="download_json_data")
+
 
 class Controller(vkt.Controller):
     parametrization = Parametrization
@@ -310,12 +341,16 @@ class Controller(vkt.Controller):
         nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
 
         sections_group = []
-        cs_size_m = float(params.cross_section.replace("HSS", "").split("×")[0]) / 1000.0
+        cs_size_m = (
+            float(params.cross_section.replace("HSS", "").split("×")[0]) / 1000.0
+        )
         B_m = float(params.bridge_width) / 1000.0
         L_m = float(params.bridge_length) / 1000.0
 
         # Bridge material with red color
-        bridge_material = Material(color=vkt.Color.from_hex("#C41E3A"), roughness=0.8, metalness=0.3)
+        bridge_material = Material(
+            color=vkt.Color.from_hex("#C41E3A"), roughness=0.8, metalness=0.3
+        )
 
         for line_id, line_data in lines.items():
             ni = nodes[line_data["NodeI"]]
@@ -326,42 +361,60 @@ class Controller(vkt.Controller):
 
             axis = Line(pi, pj)
             sections_group.append(
-                RectangularExtrusion(cs_size_m, cs_size_m, axis, identifier=str(line_id), material=bridge_material)
+                RectangularExtrusion(
+                    cs_size_m,
+                    cs_size_m,
+                    axis,
+                    identifier=str(line_id),
+                    material=bridge_material,
+                )
             )
 
         # --- Add concrete abutments ---
         height = float(params.bridge_height) / 1000.0
-        concrete_material = Material(color=vkt.Color(80, 80, 80), roughness=0.9, metalness=0.1)
-        
+        concrete_material = Material(
+            color=vkt.Color(80, 80, 80), roughness=0.9, metalness=0.1
+        )
+
         # Left abutment
-        node2 = vkt.Point(-0.4, -B_m, -height/2 + cs_size_m)
-        node1 = vkt.Point(-0.400, 2*B_m, -height/2 + cs_size_m)
+        node2 = vkt.Point(-0.4, -B_m, -height / 2 + cs_size_m)
+        node1 = vkt.Point(-0.400, 2 * B_m, -height / 2 + cs_size_m)
         center_line = vkt.Line(node1, node2)
         profile = notched_profile(width=1.000, height=height, notch=cs_size_m)
-        solid = vkt.Extrusion(profile, center_line, profile_rotation=0, material=concrete_material)
+        solid = vkt.Extrusion(
+            profile, center_line, profile_rotation=0, material=concrete_material
+        )
         sections_group.append(vkt.Group([solid, center_line]))
-        
+
         # Right abutment
-        node1 = vkt.Point(L_m + 0.4, -B_m, -height/2 + cs_size_m) 
-        node2 = vkt.Point(L_m + 0.400, 2*B_m, -height/2 + cs_size_m)
+        node1 = vkt.Point(L_m + 0.4, -B_m, -height / 2 + cs_size_m)
+        node2 = vkt.Point(L_m + 0.400, 2 * B_m, -height / 2 + cs_size_m)
         center_line = vkt.Line(node1, node2)
         profile = notched_profile(width=1.000, height=height, notch=cs_size_m)
-        solid = vkt.Extrusion(profile, center_line, profile_rotation=180, material=concrete_material)
+        solid = vkt.Extrusion(
+            profile, center_line, profile_rotation=180, material=concrete_material
+        )
         sections_group.append(vkt.Group([solid, center_line]))
 
         # --- Add bridge deck ---
         deck_thickness = 0.2  # meters
-        
-        deck_material = Material(color=vkt.Color(100, 100, 100), roughness=0.9, metalness=0.1)
+
+        deck_material = Material(
+            color=vkt.Color(100, 100, 100), roughness=0.9, metalness=0.1
+        )
         deck = SquareBeam(L_m, B_m, deck_thickness, material=deck_material)
         deck.translate((L_m / 2, B_m / 2, deck_thickness / 2))  # Position at z=0
         sections_group.append(deck)
-        
+
         # --- Add asphalt layer on top ---
         asphalt_thickness = 0.05  # meters
-        asphalt_material = Material(color=vkt.Color(40, 40, 40), roughness=1.0, metalness=0.0)
+        asphalt_material = Material(
+            color=vkt.Color(40, 40, 40), roughness=1.0, metalness=0.0
+        )
         asphalt = SquareBeam(L_m, B_m, asphalt_thickness, material=asphalt_material)
-        asphalt.translate((L_m / 2, B_m / 2, deck_thickness / 2 + asphalt_thickness / 2))
+        asphalt.translate(
+            (L_m / 2, B_m / 2, deck_thickness / 2 + asphalt_thickness / 2)
+        )
         sections_group.append(asphalt)
 
         # ---------- translucent red rectangle on the side (xz plane => y constant) ----------
@@ -382,7 +435,9 @@ class Controller(vkt.Controller):
         x0, x1 = x_min + pad_x, x_max - pad_x
         z0, z1 = z_min + pad_z, z_max - pad_z
 
-        red_transparent = Material(color=(255, 0, 0), opacity=0.25, roughness=1.0, metalness=0.0)  # :contentReference[oaicite:1]{index=1}
+        red_transparent = Material(
+            color=(255, 0, 0), opacity=0.25, roughness=1.0, metalness=0.0
+        )  # :contentReference[oaicite:1]{index=1}
 
         # Polygon is defined in the xy plane; we map:
         #   polygon.y := desired z
@@ -397,15 +452,21 @@ class Controller(vkt.Controller):
 
         # make it a thin plate so it renders from both sides
         thickness = 0.001  # 1 mm
-        plate = poly.extrude(Line(Point(0, 0, 0), Point(0, 0, thickness)), material=red_transparent)
+        plate = poly.extrude(
+            Line(Point(0, 0, 0), Point(0, 0, thickness)), material=red_transparent
+        )
 
-        plate = plate.rotate(angle=math.pi / 2, direction=(1, 0, 0), point=(0, 0, 0))  # :contentReference[oaicite:2]{index=2}
+        plate = plate.rotate(
+            angle=math.pi / 2, direction=(1, 0, 0), point=(0, 0, 0)
+        )  # :contentReference[oaicite:2]{index=2}
         plate = plate.translate((0, side_y, 0))  # :contentReference[oaicite:3]{index=3}
 
         sections_group.append(plate)
 
         # ---------- Load arrows around the perimeter of the plate ----------
-        red_arrow_material = Material(color=(200, 0, 0), opacity=1.0, roughness=0.5, metalness=0.3)
+        red_arrow_material = Material(
+            color=(200, 0, 0), opacity=1.0, roughness=0.5, metalness=0.3
+        )
         arrow_length = B_m * 0.6  # Smaller arrows
 
         # Arrow tip positions (at the plate, pointing toward structure in +Y)
@@ -467,11 +528,11 @@ class Controller(vkt.Controller):
             label_point,
             f"p = {p_kpa:.2f} kPa",
             size_factor=1.0,
-            color=vkt.Color(0, 0, 0)
+            color=vkt.Color(0, 0, 0),
         )
         # -------------------------------------------------------------------------------
 
-        return vkt.GeometryResult(geometry=sections_group, labels=[pressure_label])    
+        return vkt.GeometryResult(geometry=sections_group, labels=[pressure_label])
 
     def download_json_data(self, params, **kwargs):
         # Unit conversions (mm -> m)
@@ -500,7 +561,9 @@ class Controller(vkt.Controller):
         nodes, lines = beam.remove_top_edge_nodes(chord_tl_ids, chord_tr_ids)
 
         # Member projected width: use HSS outer size as projected width
-        member_proj_width_m = float(params.cross_section.replace("HSS", "").split("×")[0]) / 1000.0
+        member_proj_width_m = (
+            float(params.cross_section.replace("HSS", "").split("×")[0]) / 1000.0
+        )
 
         # Projected solid area Af and centroid height z_ref (centroid at H/2)
         proj = _projected_area_and_centroid_height(
@@ -550,31 +613,25 @@ class Controller(vkt.Controller):
             # Inputs
             "risk_category": str(params.risk_category),
             "site_elevation_m": float(params.site_elevation_m),
-
             "bridge_length_mm": float(params.bridge_length),
             "bridge_width_mm": float(params.bridge_width),
             "bridge_height_mm": float(params.bridge_height),
             "n_divisions": int(params.n_divisions),
             "cross_section": str(params.cross_section),
-
             "exposure_category": str(params.exposure_category),
             "wind_speed_ms": float(params.wind_speed_ms),
             "kzt": float(params.topographic_factor_kzt),
             "kd": float(params.directionality_factor_kd),
             "g": float(params.gust_effect_factor_g),
-
             "Af_members_m2": round(proj["Af_members_m2"], 4),
             "Af_total_m2": round(Af_m2, 4),
             "Ag_m2": round(Ag_m2, 4),
             "solidity_ratio_epsilon": round(epsilon, 4),
-
-
             # Wind pressures
             "velocity_pressure_coeff": round(vp["coeff"], 4),
             "kz": round(kz, 4),
             "qz_kpa": round(qz_kpa, 4),
             "p_kpa": round(p_kpa, 4),
-
             # Lattice force
             "cf": round(Cf, 4),
         }
