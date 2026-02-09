@@ -60,15 +60,15 @@ where:
         "Node Coordinates",
         default=[
             {"node_name": "N1", "x": 0.0, "y": 0.0, "z": 0.0},
-            {"node_name": "N2", "x": 5000.0, "y": 0.0, "z": 0.0},
-            {"node_name": "N3", "x": 5000.0, "y": 5000.0, "z": 0.0},
-            {"node_name": "N4", "x": 0.0, "y": 5000.0, "z": 0.0},
+            {"node_name": "N2", "x": 5.0, "y": 0.0, "z": 0.0},
+            {"node_name": "N3", "x": 5.0, "y": 5.0, "z": 0.0},
+            {"node_name": "N4", "x": 0.0, "y": 5.0, "z": 0.0},
         ],
     )
     section_node_coords.node_coords.node_name = vkt.TextField("Node Name")
-    section_node_coords.node_coords.x = vkt.NumberField("X (mm)", num_decimals=2)
-    section_node_coords.node_coords.y = vkt.NumberField("Y (mm)", num_decimals=2)
-    section_node_coords.node_coords.z = vkt.NumberField("Z (mm)", num_decimals=2)
+    section_node_coords.node_coords.x = vkt.NumberField("X (m)", num_decimals=2)
+    section_node_coords.node_coords.y = vkt.NumberField("Y (m)", num_decimals=2)
+    section_node_coords.node_coords.z = vkt.NumberField("Z (m)", num_decimals=2)
 
     # Node Reactions Section
     section_node_reactions = vkt.Section("Node Reactions & Loads")
@@ -81,104 +81,104 @@ where:
             {
                 "node_name": "N1",
                 "load_combo": "LC1",
-                "fx": 0.0,
-                "fy": 0.0,
-                "fz": -15.0,
-                "mx": 10.0,
-                "my": 8.0,
-                "mz": 0.0,
+                "F1": 0.0,
+                "F2": 0.0,
+                "F3": -15.0,
+                "M1": 10.0,
+                "M2": 8.0,
+                "M3": 0.0,
             },
             {
                 "node_name": "N1",
                 "load_combo": "LC2",
-                "fx": 5.0,
-                "fy": 3.0,
-                "fz": -18.0,
-                "mx": 15.0,
-                "my": 12.0,
-                "mz": 0.0,
+                "F1": 5.0,
+                "F2": 3.0,
+                "F3": -18.0,
+                "M1": 15.0,
+                "M2": 12.0,
+                "M3": 0.0,
             },
             {
                 "node_name": "N2",
                 "load_combo": "LC1",
-                "fx": 0.0,
-                "fy": 0.0,
-                "fz": -20.0,
-                "mx": 15.0,
-                "my": 12.0,
-                "mz": 0.0,
+                "F1": 0.0,
+                "F2": 0.0,
+                "F3": -20.0,
+                "M1": 15.0,
+                "M2": 12.0,
+                "M3": 0.0,
             },
             {
                 "node_name": "N2",
                 "load_combo": "LC2",
-                "fx": 8.0,
-                "fy": 4.0,
-                "fz": -23.0,
-                "mx": 20.0,
-                "my": 18.0,
-                "mz": 0.0,
+                "F1": 8.0,
+                "F2": 4.0,
+                "F3": -23.0,
+                "M1": 20.0,
+                "M2": 18.0,
+                "M3": 0.0,
             },
             {
                 "node_name": "N3",
                 "load_combo": "LC1",
-                "fx": 0.0,
-                "fy": 0.0,
-                "fz": -20.0,
-                "mx": 15.0,
-                "my": 12.0,
-                "mz": 0.0,
+                "F1": 0.0,
+                "F2": 0.0,
+                "F3": -20.0,
+                "M1": 15.0,
+                "M2": 12.0,
+                "M3": 0.0,
             },
             {
                 "node_name": "N3",
                 "load_combo": "LC2",
-                "fx": 8.0,
-                "fy": 4.0,
-                "fz": -23.0,
-                "mx": 20.0,
-                "my": 18.0,
-                "mz": 0.0,
+                "F1": 8.0,
+                "F2": 4.0,
+                "F3": -23.0,
+                "M1": 20.0,
+                "M2": 18.0,
+                "M3": 0.0,
             },
             {
                 "node_name": "N4",
                 "load_combo": "LC1",
-                "fx": 0.0,
-                "fy": 0.0,
-                "fz": -15.0,
-                "mx": 10.0,
-                "my": 8.0,
-                "mz": 0.0,
+                "F1": 0.0,
+                "F2": 0.0,
+                "F3": -15.0,
+                "M1": 10.0,
+                "M2": 8.0,
+                "M3": 0.0,
             },
             {
                 "node_name": "N4",
                 "load_combo": "LC2",
-                "fx": 5.0,
-                "fy": 3.0,
-                "fz": -18.0,
-                "mx": 15.0,
-                "my": 12.0,
-                "mz": 0.0,
+                "F1": 5.0,
+                "F2": 3.0,
+                "F3": -18.0,
+                "M1": 15.0,
+                "M2": 12.0,
+                "M3": 0.0,
             },
         ],
     )
     section_node_reactions.node_reactions.node_name = vkt.TextField("Node Name")
     section_node_reactions.node_reactions.load_combo = vkt.TextField("Load Combo")
-    section_node_reactions.node_reactions.fx = vkt.NumberField(
-        "FX (kN)", num_decimals=2
+    section_node_reactions.node_reactions.F1 = vkt.NumberField(
+        "F1 (kN)", num_decimals=2
     )
-    section_node_reactions.node_reactions.fy = vkt.NumberField(
-        "FY (kN)", num_decimals=2
+    section_node_reactions.node_reactions.F2 = vkt.NumberField(
+        "F2 (kN)", num_decimals=2
     )
-    section_node_reactions.node_reactions.fz = vkt.NumberField(
-        "FZ (kN)", num_decimals=2
+    section_node_reactions.node_reactions.F3 = vkt.NumberField(
+        "F3 (kN)", num_decimals=2
     )
-    section_node_reactions.node_reactions.mx = vkt.NumberField(
-        "MX (kN·m)", num_decimals=2
+    section_node_reactions.node_reactions.M1 = vkt.NumberField(
+        "M1 (kN·m)", num_decimals=2
     )
-    section_node_reactions.node_reactions.my = vkt.NumberField(
-        "MY (kN·m)", num_decimals=2
+    section_node_reactions.node_reactions.M2 = vkt.NumberField(
+        "M2 (kN·m)", num_decimals=2
     )
-    section_node_reactions.node_reactions.mz = vkt.NumberField(
-        "MZ (kN·m)", num_decimals=2
+    section_node_reactions.node_reactions.M3 = vkt.NumberField(
+        "M3 (kN·m)", num_decimals=2
     )
 
     # Material Properties
@@ -334,12 +334,12 @@ class Controller(vkt.Controller):
                 reactions_by_node[node_name].append(
                     {
                         "load_combo": reaction.get("load_combo", "LC1"),
-                        "fx": float(reaction.get("fx", 0) or 0),
-                        "fy": float(reaction.get("fy", 0) or 0),
-                        "fz": float(reaction.get("fz", 0) or 0),
-                        "mx": float(reaction.get("mx", 0) or 0),
-                        "my": float(reaction.get("my", 0) or 0),
-                        "mz": float(reaction.get("mz", 0) or 0),
+                        "F1": float(reaction.get("F1", 0) or 0),
+                        "F2": float(reaction.get("F2", 0) or 0),
+                        "F3": float(reaction.get("F3", 0) or 0),
+                        "M1": float(reaction.get("M1", 0) or 0),
+                        "M2": float(reaction.get("M2", 0) or 0),
+                        "M3": float(reaction.get("M3", 0) or 0),
                     }
                 )
         return reactions_by_node
@@ -384,8 +384,8 @@ class Controller(vkt.Controller):
             node_name = coord.get("node_name", "")
             if node_name:
                 coords_by_node[node_name] = {
-                    "x": float(coord.get("x", 0) or 0) / 1000,  # Convert mm to m
-                    "y": float(coord.get("y", 0) or 0) / 1000,
+                    "x": float(coord.get("x", 0) or 0),  # Already in meters
+                    "y": float(coord.get("y", 0) or 0),
                 }
 
         reactions_by_node = self.create_reactions_lookup(node_reactions_list)
@@ -400,7 +400,7 @@ class Controller(vkt.Controller):
             load_combos = reactions_by_node[node_name]
 
             # Check if any load combo has non-zero axial load
-            has_axial_load = any(abs(lc["fz"]) > 0.001 for lc in load_combos)
+            has_axial_load = any(abs(lc["F3"]) > 0.001 for lc in load_combos)
             if not has_axial_load:
                 continue
 
@@ -576,7 +576,7 @@ class Controller(vkt.Controller):
             load_combos = reactions_by_node[node_name]
 
             # Check if any load combo has non-zero axial load
-            has_axial_load = any(abs(lc["fz"]) > 0.001 for lc in load_combos)
+            has_axial_load = any(abs(lc["F3"]) > 0.001 for lc in load_combos)
             if not has_axial_load:
                 node_groups.append(
                     vkt.DataItem(
@@ -782,7 +782,7 @@ class Controller(vkt.Controller):
 
             node_data = {
                 "node_name": node_name,
-                "coordinates_mm": {"x": coords["x"] * 1000, "y": coords["y"] * 1000},
+                "coordinates_m": {"x": coords["x"], "y": coords["y"]},
             }
 
             # Check if node has an optimal design

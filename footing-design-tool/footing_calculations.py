@@ -157,7 +157,7 @@ def check_bearing_pressure(
 
 def calculate_eccentricities(
     load_combo: Annotated[
-        dict, "Load combo dict with fx, fy, fz, mx, my reaction forces (kN, kN·m)"
+        dict, "Load combo dict with F1, F2, F3, M1, M2 reaction forces (kN, kN·m)"
     ],
     footing_weight: Annotated[float, "Weight of footing concrete (kN)"],
     fill_weight: Annotated[float, "Weight of fill material (kN)"],
@@ -177,11 +177,11 @@ def calculate_eccentricities(
     Returns:
         Tuple of (fz_total, ex, ey, mx_base, my_base)
     """
-    fz_reaction = abs(load_combo["fz"])
-    fx = load_combo["fx"]
-    fy = load_combo["fy"]
-    mx_reaction = abs(load_combo["mx"])
-    my_reaction = abs(load_combo["my"])
+    fz_reaction = abs(load_combo["F3"])
+    fx = load_combo["F1"]
+    fy = load_combo["F2"]
+    mx_reaction = abs(load_combo["M1"])
+    my_reaction = abs(load_combo["M2"])
 
     # Total vertical load at base
     fz_total = fz_reaction + footing_weight + fill_weight + pedestal_weight
@@ -227,7 +227,7 @@ def check_design_for_all_load_combos(
     governing_results = {}
 
     for lc in load_combos:
-        fz_reaction = abs(lc["fz"])
+        fz_reaction = abs(lc["F3"])
         if fz_reaction < 0.001:
             continue  # Skip zero load combos
 
