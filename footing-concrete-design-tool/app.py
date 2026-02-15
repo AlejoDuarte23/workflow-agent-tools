@@ -1,5 +1,6 @@
 import viktor as vkt
 import math
+import report_template
 
 
 # ==============================================
@@ -343,27 +344,53 @@ class Parametrization(vkt.Parametrization):
     section_intro = vkt.Section("Introduction")
     section_intro.intro = vkt.Text("""
 ## Multi-Node Concrete Footing Design Tool (ACI 318-19)
-Checks:
-- Foundation weights (slab + pedestal + optional fill)
-- Factored actions at footing slab level (centroid)
-- Two-way shear (punching)
-- One-way shear
-- Flexure (required As)
-- Rebar spacing
+Checks foundation weights, factored actions, two-way shear (punching), one-way shear, flexure, and rebar spacing.
+
+### Effective Depth
+$$d = H - \\text{cover} - \\frac{d_b}{2}$$
+
+### Two-Way Shear (Punching) - ACI 22.6
+$$b_0 = 2(b_1 + d) + 2(b_2 + d)$$
+$$\\phi V_c = 0.75 \\times \\min\\left(0.33\\lambda_s\\sqrt{f'_c}, 0.17(1+\\frac{2}{\\beta})\\lambda_s\\sqrt{f'_c}, 0.083(2+\\frac{\\alpha_s d}{b_0})\\lambda_s\\sqrt{f'_c}\\right) b_0 d$$
+
+### One-Way Shear (Beam) - ACI 22.5
+$$V_{u,x} = \\sigma_u B\\left(\\frac{L}{2} - \\frac{b_2}{2} - d\\right), \\quad \\phi V_{c,x} = 0.75 \\times 0.17\\sqrt{f'_c} b_w d$$
+
+### Flexure - Strip Method
+$$M_u = \\frac{w_u}{2}\\left(\\frac{L}{2} - \\frac{b_2}{2}\\right)^2$$
+$$\\phi M_n = \\phi A_s f_y\\left(d - \\frac{a}{2}\\right), \\quad a = \\frac{A_s f_y}{0.85f'_c b}$$
+$$A_{s,\\text{req}} = \\max\\left(A_{s,\\text{calc}}, A_{s,\\min}\\right), \\quad A_{s,\\min} = 0.0018bh$$
+
+### Rebar Spacing
+$$n = \\lceil\\frac{A_s}{A_b}\\rceil, \\quad s_{\\text{c/c}} = \\frac{L_{\\text{strip}} - 2\\times\\text{cover} - n d_b}{n-1} + d_b$$
 """)
 
-    section_geometry = vkt.Section("Node Geometry & Dimensions")
+    section_nodes = vkt.Section("Node Coordinates")
+    section_nodes.node_coordinates = vkt.Table(
+        "Node Locations",
+        default=[
+            {"node_name": "N1", "x": 0.0, "y": 0.0, "z": 0.0},
+            {"node_name": "N2", "x": 5.0, "y": 0.0, "z": 0.0},
+            {"node_name": "N3", "x": 10.0, "y": 0.0, "z": 0.0},
+            {"node_name": "N4", "x": 0.0, "y": 5.0, "z": 0.0},
+        ],
+    )
+    section_nodes.node_coordinates.node_name = vkt.TextField("Node Name")
+    section_nodes.node_coordinates.x = vkt.NumberField("X", num_decimals=2, suffix="m")
+    section_nodes.node_coordinates.y = vkt.NumberField("Y", num_decimals=2, suffix="m")
+    section_nodes.node_coordinates.z = vkt.NumberField("Z", num_decimals=2, suffix="m")
+
+    section_geometry = vkt.Section("Footing & Pedestal Dimensions")
     section_geometry.node_geometry = vkt.Table(
         "Footing and Pedestal Geometry",
         default=[
-            {"node_name": "N1", "x": 0.0, "y": 0.0, "z": 0.0,
-             "B": 2.2, "L": 2.4, "H": 0.6, "b1": 0.4, "b2": 0.5, "ph": 1.0},
+            {"node_name": "N1", "B": 2.2, "L": 2.4, "H": 0.6, "b1": 0.4, "b2": 0.5, "ph": 1.0},
+            {"node_name": "N2", "B": 2.2, "L": 2.4, "H": 0.6, "b1": 0.4, "b2": 0.5, "ph": 1.0},
+            {"node_name": "N3", "B": 2.2, "L": 2.4, "H": 0.6, "b1": 0.4, "b2": 0.5, "ph": 1.0},
+            {"node_name": "N4", "B": 2.2, "L": 2.4, "H": 0.6, "b1": 0.4, "b2": 0.5, "ph": 1.0},
         ],
     )
     section_geometry.node_geometry.node_name = vkt.TextField("Node Name")
-    section_geometry.node_geometry.x = vkt.NumberField("X", num_decimals=2, suffix="m")
-    section_geometry.node_geometry.y = vkt.NumberField("Y", num_decimals=2, suffix="m")
-    section_geometry.node_geometry.z = vkt.NumberField("Z", num_decimals=2, suffix="m")
     section_geometry.node_geometry.B = vkt.NumberField("Footing Width (B)", num_decimals=2, suffix="m")
     section_geometry.node_geometry.L = vkt.NumberField("Footing Length (L)", num_decimals=2, suffix="m")
     section_geometry.node_geometry.H = vkt.NumberField("Footing Thickness (H)", num_decimals=2, suffix="m")
@@ -376,6 +403,15 @@ Checks:
         "Node Reactions & Load Combinations",
         default=[
             {"case_name": "LC1", "node_name": "N1",
+             "F1": 3.0, "F2": 2.0, "F3": -1750.0,
+             "M1": 100.0, "M2": 100.0, "M3": 0.0},
+            {"case_name": "LC2", "node_name": "N2",
+             "F1": 3.0, "F2": 2.0, "F3": -1700.0,
+             "M1": 80.0, "M2": 60.0, "M3": 0.0},
+            {"case_name": "LC3", "node_name": "N3",
+             "F1": 3.0, "F2": 2.0, "F3": -1700.0,
+             "M1": 80.0, "M2": 60.0, "M3": 0.0},
+            {"case_name": "LC4", "node_name": "N4",
              "F1": 3.0, "F2": 2.0, "F3": -1700.0,
              "M1": 80.0, "M2": 60.0, "M3": 0.0},
         ],
@@ -407,10 +443,20 @@ class Controller(vkt.Controller):
     parametrization = Parametrization
 
     def create_geometry_lookup(self, params):
+        # Build coordinate lookup
+        coords_by_node = {}
+        for row in params.section_nodes.node_coordinates:
+            coords_by_node[row["node_name"]] = {
+                "x": row["x"], "y": row["y"], "z": row["z"],
+            }
+
+        # Build geometry lookup, merging with coordinates
         geometry_by_node = {}
         for row in params.section_geometry.node_geometry:
-            geometry_by_node[row["node_name"]] = {
-                "x": row["x"], "y": row["y"], "z": row["z"],
+            node_name = row["node_name"]
+            coords = coords_by_node.get(node_name, {"x": 0.0, "y": 0.0, "z": 0.0})
+            geometry_by_node[node_name] = {
+                "x": coords["x"], "y": coords["y"], "z": coords["z"],
                 "B": row["B"], "L": row["L"], "H": row["H"],
                 "b1": row["b1"], "b2": row["b2"], "ph": row["ph"],
             }
@@ -566,3 +612,354 @@ class Controller(vkt.Controller):
                 main_group.add(self.build_node_loadcase_item(node_name, lc["case_name"], geometry, d, lc_result))
 
         return vkt.DataResult(main_group)
+
+    @vkt.WebView("Calculation Report", duration_guess=10)
+    def view_calculation_report(self, params, **kwargs):
+        """Display Mathcad-like calculation report with equations and results"""
+
+        geometry_by_node = self.create_geometry_lookup(params)
+        loads_by_node = self.create_loads_lookup(params)
+
+        fc = params.section_concrete.fc
+        fy = params.section_concrete.fy
+        gamma_concrete = params.section_concrete.gamma_concrete
+        gamma_fill = params.section_concrete.gamma_fill
+        cover = params.section_concrete.cover
+        db = params.section_concrete.db
+
+        # Store results for each node-loadcase combination
+        results_by_node_lc = {}
+
+        # Process all node-loadcase combinations
+        for node_name, geometry in geometry_by_node.items():
+            if node_name not in loads_by_node:
+                continue
+
+            d = calculate_effective_depth(geometry["H"], cover, db)
+
+            weights = calculate_foundation_weights(
+                geometry["B"], geometry["L"], geometry["H"],
+                geometry["b1"], geometry["b2"], geometry["ph"],
+                gamma_concrete, gamma_fill
+            )
+
+            for lc in loads_by_node[node_name]:
+                if abs(lc["F3"]) < 1e-9:
+                    continue
+
+                factored = calculate_factored_actions(lc, weights["total_weight"], geometry["ph"], geometry["H"])
+
+                punch = check_punching_shear(
+                    factored["Fz_footing"], geometry["B"], geometry["L"],
+                    geometry["b1"], geometry["b2"], d, fc,
+                )
+
+                oneway = check_one_way_shear(
+                    factored["Fz_footing"], geometry["B"], geometry["L"],
+                    geometry["b1"], geometry["b2"], d, fc,
+                )
+
+                flex = calculate_required_rebar(
+                    factored["Fz_footing"], geometry["B"], geometry["L"],
+                    geometry["b1"], geometry["b2"], d, geometry["H"], fc, fy,
+                )
+
+                spacing = calculate_rebar_spacing_strip_method(
+                    geometry["B"], geometry["L"], geometry["H"],
+                    cover_mm=cover, db_mm=db,
+                    As_req_x=flex["As_req_x"], As_req_y=flex["As_req_y"],
+                )
+
+                combo_pass = punch["passes"] and oneway["passes"]
+
+                results_by_node_lc[(node_name, lc["case_name"])] = {
+                    "weights": weights,
+                    "factored_actions": factored,
+                    "punching_shear": punch,
+                    "one_way_shear": oneway,
+                    "flexure": flex,
+                    "spacing": spacing,
+                    "overall_pass": combo_pass,
+                }
+
+        # Build HTML report
+        html = report_template.get_report_header()
+        html += report_template.format_design_parameters(fc, fy, gamma_concrete, gamma_fill, cover, db)
+        html += report_template.get_design_equations()
+        html += report_template.format_node_geometry_table(geometry_by_node)
+        html += report_template.format_load_cases_table(loads_by_node)
+        html += report_template.format_design_results(results_by_node_lc)
+        html += report_template.get_report_footer()
+
+        return vkt.WebResult(html=html)
+
+    @vkt.PlotlyView("Footing Plan View - Critical Zones", duration_guess=5)
+    def view_footing_plan(self, params, **kwargs):
+        """2D plan view showing footings with critical shear zones highlighted"""
+        import plotly.graph_objects as go
+
+        geometry_by_node = self.create_geometry_lookup(params)
+        loads_by_node = self.create_loads_lookup(params)
+
+        fc = params.section_concrete.fc
+        fy = params.section_concrete.fy
+        gamma_concrete = params.section_concrete.gamma_concrete
+        gamma_fill = params.section_concrete.gamma_fill
+        cover = params.section_concrete.cover
+        db = params.section_concrete.db
+
+        # Create Plotly figure
+        fig = go.Figure()
+
+        # Colors
+        footing_color = "rgba(200, 200, 200, 0.5)"
+        pedestal_color = "rgba(80, 80, 80, 0.8)"
+        punching_pass_color = "rgba(76, 175, 80, 0.3)"
+        punching_fail_color = "rgba(244, 67, 54, 0.3)"
+        oneway_color = "rgba(33, 150, 243, 0.2)"
+
+        # Track bounds for layout
+        all_x = []
+        all_y = []
+
+        for node_name, geometry in geometry_by_node.items():
+            if node_name not in loads_by_node or not loads_by_node[node_name]:
+                continue
+
+            # Get node position
+            cx = geometry['x']
+            cy = geometry['y']
+
+            B = geometry['B']
+            L = geometry['L']
+            H = geometry['H']
+            b1 = geometry['b1']
+            b2 = geometry['b2']
+            ph = geometry['ph']
+
+            d = calculate_effective_depth(H, cover, db)
+
+            # Calculate weights and checks for worst case (first load case)
+            lc = loads_by_node[node_name][0]
+            weights = calculate_foundation_weights(B, L, H, b1, b2, ph, gamma_concrete, gamma_fill)
+            factored = calculate_factored_actions(lc, weights["total_weight"], ph, H)
+            punch = check_punching_shear(factored["Fz_footing"], B, L, b1, b2, d, fc)
+            oneway = check_one_way_shear(factored["Fz_footing"], B, L, b1, b2, d, fc)
+
+            # Footing outline
+            x0, x1 = cx - B / 2, cx + B / 2
+            y0, y1 = cy - L / 2, cy + L / 2
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[x0, x1, x1, x0, x0],
+                    y=[y0, y0, y1, y1, y0],
+                    mode="lines",
+                    fill="toself",
+                    fillcolor=footing_color,
+                    line=dict(color="rgba(100,100,100,1)", width=2),
+                    name=f"{node_name} Footing",
+                    hoverinfo="text",
+                    text=f"{node_name}<br>Footing: {B:.2f}m × {L:.2f}m × {H:.2f}m<br>d = {d:.3f}m",
+                    showlegend=False,
+                )
+            )
+
+            # Punching shear critical perimeter (at d from pedestal face)
+            punch_color = punching_pass_color if punch["passes"] else punching_fail_color
+            b1_crit = b1 + 2 * d
+            b2_crit = b2 + 2 * d
+            px0, px1 = cx - b1_crit / 2, cx + b1_crit / 2
+            py0, py1 = cy - b2_crit / 2, cy + b2_crit / 2
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[px0, px1, px1, px0, px0],
+                    y=[py0, py0, py1, py1, py0],
+                    mode="lines",
+                    fill="toself",
+                    fillcolor=punch_color,
+                    line=dict(color="rgba(200,0,0,0.8)" if not punch["passes"] else "rgba(0,150,0,0.8)",
+                              width=2, dash="dash"),
+                    name=f"{node_name} Punching Zone",
+                    hoverinfo="text",
+                    text=f"{node_name} Punching Shear<br>b₀ = {punch['b0']:.2f}m<br>Vu = {punch['Vu']:.1f}kN<br>φVc = {punch['Vc_min']:.1f}kN<br>Status: {'PASS' if punch['passes'] else 'FAIL'}",
+                    showlegend=False,
+                )
+            )
+
+            # One-way shear critical sections (at d from pedestal face)
+            # X-direction (vertical lines)
+            x_crit_left = cx - b2 / 2 - d
+            x_crit_right = cx + b2 / 2 + d
+            if abs(x_crit_left - x0) > 0.01:  # Only show if there's space
+                fig.add_trace(
+                    go.Scatter(
+                        x=[x_crit_left, x_crit_left],
+                        y=[y0, y1],
+                        mode="lines",
+                        line=dict(color="rgba(33,150,243,0.6)", width=2, dash="dot"),
+                        name=f"{node_name} One-Way X",
+                        hoverinfo="text",
+                        text=f"{node_name} One-Way Shear X<br>Vu = {oneway['Vu_x']:.1f}kN<br>φVc = {oneway['Vc_x']:.1f}kN<br>Status: {'PASS' if oneway['Vu_x'] <= oneway['Vc_x'] else 'FAIL'}",
+                        showlegend=False,
+                    )
+                )
+            if abs(x_crit_right - x1) > 0.01:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[x_crit_right, x_crit_right],
+                        y=[y0, y1],
+                        mode="lines",
+                        line=dict(color="rgba(33,150,243,0.6)", width=2, dash="dot"),
+                        name=f"{node_name} One-Way X",
+                        hoverinfo="skip",
+                        showlegend=False,
+                    )
+                )
+
+            # Y-direction (horizontal lines)
+            y_crit_bottom = cy - b1 / 2 - d
+            y_crit_top = cy + b1 / 2 + d
+            if abs(y_crit_bottom - y0) > 0.01:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[x0, x1],
+                        y=[y_crit_bottom, y_crit_bottom],
+                        mode="lines",
+                        line=dict(color="rgba(33,150,243,0.6)", width=2, dash="dot"),
+                        name=f"{node_name} One-Way Y",
+                        hoverinfo="text",
+                        text=f"{node_name} One-Way Shear Y<br>Vu = {oneway['Vu_y']:.1f}kN<br>φVc = {oneway['Vc_y']:.1f}kN<br>Status: {'PASS' if oneway['Vu_y'] <= oneway['Vc_y'] else 'FAIL'}",
+                        showlegend=False,
+                    )
+                )
+            if abs(y_crit_top - y1) > 0.01:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[x0, x1],
+                        y=[y_crit_top, y_crit_top],
+                        mode="lines",
+                        line=dict(color="rgba(33,150,243,0.6)", width=2, dash="dot"),
+                        name=f"{node_name} One-Way Y",
+                        hoverinfo="skip",
+                        showlegend=False,
+                    )
+                )
+
+            # Pedestal rectangle
+            ped_x0, ped_x1 = cx - b1 / 2, cx + b1 / 2
+            ped_y0, ped_y1 = cy - b2 / 2, cy + b2 / 2
+            fig.add_trace(
+                go.Scatter(
+                    x=[ped_x0, ped_x1, ped_x1, ped_x0, ped_x0],
+                    y=[ped_y0, ped_y0, ped_y1, ped_y1, ped_y0],
+                    mode="lines",
+                    fill="toself",
+                    fillcolor=pedestal_color,
+                    line=dict(color="rgba(50,50,50,1)", width=2),
+                    name=f"{node_name} Pedestal",
+                    hoverinfo="text",
+                    text=f"{node_name}<br>Pedestal: {b1:.3f}m × {b2:.3f}m × {ph:.2f}m",
+                    showlegend=False,
+                )
+            )
+
+            # Add node label
+            fig.add_annotation(
+                x=cx,
+                y=cy,
+                text=f"<b>{node_name}</b>",
+                showarrow=False,
+                font=dict(size=12, color="white"),
+                bgcolor="rgba(50,50,50,0.8)",
+                borderpad=4,
+            )
+
+            all_x.extend([x0, x1])
+            all_y.extend([y0, y1])
+
+        # Calculate plot bounds
+        if all_x and all_y:
+            margin = 1.0
+            x_range = [min(all_x) - margin, max(all_x) + margin]
+            y_range = [min(all_y) - margin, max(all_y) + margin]
+        else:
+            x_range = [-5, 10]
+            y_range = [-5, 10]
+
+        # Add legend traces (dummy traces for legend only)
+        fig.add_trace(
+            go.Scatter(
+                x=[None], y=[None],
+                mode="markers",
+                marker=dict(size=10, color=footing_color, line=dict(color="rgba(100,100,100,1)", width=2)),
+                name="Footing Outline",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[None], y=[None],
+                mode="markers",
+                marker=dict(size=10, color=pedestal_color, line=dict(color="rgba(50,50,50,1)", width=2)),
+                name="Pedestal",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[None], y=[None],
+                mode="lines",
+                line=dict(color="rgba(0,150,0,0.8)", width=2, dash="dash"),
+                name="Punching Critical Perimeter (Pass)",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[None], y=[None],
+                mode="lines",
+                line=dict(color="rgba(200,0,0,0.8)", width=2, dash="dash"),
+                name="Punching Critical Perimeter (Fail)",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[None], y=[None],
+                mode="lines",
+                line=dict(color="rgba(33,150,243,0.6)", width=2, dash="dot"),
+                name="One-Way Shear Critical Section",
+            )
+        )
+
+        # Layout
+        fig.update_layout(
+            title="Footing Plan View - Critical Shear Zones (ACI 318-19)",
+            xaxis=dict(
+                title="X (m)",
+                scaleanchor="y",
+                scaleratio=1,
+                range=x_range,
+                showgrid=True,
+                gridcolor="rgba(200, 200, 200, 0.3)",
+                griddash="dash",
+            ),
+            yaxis=dict(
+                title="Y (m)",
+                range=y_range,
+                showgrid=True,
+                gridcolor="rgba(200, 200, 200, 0.3)",
+                griddash="dash",
+            ),
+            plot_bgcolor="white",
+            margin=dict(l=60, r=60, t=60, b=60),
+            legend=dict(
+                yanchor="top",
+                y=0.99,
+                xanchor="right",
+                x=0.99,
+                bgcolor="rgba(255,255,255,0.9)",
+                bordercolor="rgba(0,0,0,0.3)",
+                borderwidth=1,
+            ),
+        )
+
+        return vkt.PlotlyResult(fig.to_json())
