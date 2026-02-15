@@ -430,8 +430,12 @@ $$n = \\lceil\\frac{A_s}{A_b}\\rceil, \\quad s_{\\text{c/c}} = \\frac{L_{\\text{
     section_concrete.fc = vkt.NumberField("Concrete Strength (f'c)", default=28.0, min=0, suffix="MPa", num_decimals=1)
     section_concrete.fy = vkt.NumberField("Steel Yield Strength (fy)", default=420.0, min=0, suffix="MPa", num_decimals=1)
     section_concrete.gamma_fill = vkt.NumberField("Fill Unit Weight (γ_fill)", default=19.5, min=0, suffix="kN/m³", num_decimals=1)
-    section_concrete.cover = vkt.NumberField("Concrete Cover", default=90, min=0, suffix="mm", num_decimals=0)
+    section_concrete.cover = vkt.NumberField("Concrete Cover", default=60, min=0, suffix="mm", num_decimals=0)
     section_concrete.db = vkt.NumberField("Rebar Diameter (db)", default=12, min=0, suffix="mm", num_decimals=0)
+
+    # Download section
+    download_section = vkt.Section("Export Results")
+    download_section.download_btn = vkt.DownloadButton("Download Design Results (JSON)", method="download_design_results")
 
 
 
@@ -441,6 +445,214 @@ $$n = \\lceil\\frac{A_s}{A_b}\\rceil, \\quad s_{\\text{c/c}} = \\frac{L_{\\text{
 
 class Controller(vkt.Controller):
     parametrization = Parametrization
+
+    def download_design_results(self, params, **kwargs):
+        """Download design results as JSON file following data view structure"""
+        import json
+        from io import BytesIO
+
+        geometry_by_node = self.create_geometry_lookup(params)
+        loads_by_node = self.create_loads_lookup(params)
+
+        fc = params.section_concrete.fc
+        fy = params.section_concrete.fy
+        gamma_concrete = params.section_concrete.gamma_concrete
+        gamma_fill = params.section_concrete.gamma_fill
+        cover = params.section_concrete.cover
+        db = params.section_concrete.db
+
+        results_data = {
+            "design_parameters": {
+                "concrete_strength_fc_MPa": fc,
+                "steel_yield_fy_MPa": fy,
+                "gamma_concrete_kN_m3": gamma_concrete,
+                "gamma_fill_kN_m3": gamma_fill,
+                "cover_mm": cover,
+                "rebar_diameter_db_mm": db
+            },
+            "nodes": {}
+        }
+
+        # Process each node: evaluate ALL load cases and find governing ones
+        for node_name, geometry in geometry_by_node.items():
+            if node_name not in loads_by_node:
+                results_data["nodes"][node_name] = {
+                    "status": "No load cases defined"
+                }
+                continue
+
+            d = calculate_effective_depth(geometry["H"], cover, db)
+
+            weights = calculate_foundation_weights(
+                geometry["B"], geometry["L"], geometry["H"],
+                geometry["b1"], geometry["b2"], geometry["ph"],
+                gamma_concrete, gamma_fill
+            )
+
+            # Track critical cases
+            crit_punching = None
+            crit_oneway_x = None
+            crit_oneway_y = None
+            crit_flexure_x = None
+            crit_flexure_y = None
+
+            # Loop through all load cases for this node
+            for lc in loads_by_node[node_name]:
+                if abs(lc["F3"]) < 1e-9:
+                    continue
+
+                factored = calculate_factored_actions(lc, weights["total_weight"], geometry["ph"], geometry["H"])
+
+                punch = check_punching_shear(
+                    factored["Fz_footing"], geometry["B"], geometry["L"],
+                    geometry["b1"], geometry["b2"], d, fc,
+                )
+
+                oneway = check_one_way_shear(
+                    factored["Fz_footing"], geometry["B"], geometry["L"],
+                    geometry["b1"], geometry["b2"], d, fc,
+                )
+
+                flex = calculate_required_rebar(
+                    factored["Fz_footing"], geometry["B"], geometry["L"],
+                    geometry["b1"], geometry["b2"], d, geometry["H"], fc, fy,
+                )
+
+                # Track critical punching shear (highest utilization)
+                punch_util = punch["Vu"] / punch["Vc_min"] if punch["Vc_min"] > 0 else 0.0
+                if crit_punching is None or punch_util > crit_punching["util"]:
+                    crit_punching = {
+                        "case_name": lc["case_name"],
+                        "Vu_kN": punch["Vu"],
+                        "Vc_min_kN": punch["Vc_min"],
+                        "utilization": punch_util,
+                        "passes": punch["passes"],
+                    }
+
+                # Track critical one-way shear X
+                if crit_oneway_x is None or oneway["util_x"] > crit_oneway_x["util"]:
+                    crit_oneway_x = {
+                        "case_name": lc["case_name"],
+                        "Vu_kN": oneway["Vu_x"],
+                        "Vc_kN": oneway["Vc_x"],
+                        "utilization": oneway["util_x"],
+                        "passes": oneway["Vu_x"] <= oneway["Vc_x"],
+                    }
+
+                # Track critical one-way shear Y
+                if crit_oneway_y is None or oneway["util_y"] > crit_oneway_y["util"]:
+                    crit_oneway_y = {
+                        "case_name": lc["case_name"],
+                        "Vu_kN": oneway["Vu_y"],
+                        "Vc_kN": oneway["Vc_y"],
+                        "utilization": oneway["util_y"],
+                        "passes": oneway["Vu_y"] <= oneway["Vc_y"],
+                    }
+
+                # Track critical flexure X (highest As_req)
+                if crit_flexure_x is None or flex["As_req_x"] > crit_flexure_x["As_req_mm2"]:
+                    crit_flexure_x = {
+                        "case_name": lc["case_name"],
+                        "As_req_mm2": flex["As_req_x"],
+                        "Mu_kNm": flex["Mu_x"],
+                    }
+
+                # Track critical flexure Y (highest As_req)
+                if crit_flexure_y is None or flex["As_req_y"] > crit_flexure_y["As_req_mm2"]:
+                    crit_flexure_y = {
+                        "case_name": lc["case_name"],
+                        "As_req_mm2": flex["As_req_y"],
+                        "Mu_kNm": flex["Mu_y"],
+                    }
+
+            # Calculate spacing based on envelope As_req
+            spacing = calculate_rebar_spacing_strip_method(
+                geometry["B"], geometry["L"], geometry["H"],
+                cover_mm=cover, db_mm=db,
+                As_req_x=crit_flexure_x["As_req_mm2"],
+                As_req_y=crit_flexure_y["As_req_mm2"],
+            )
+
+            # Overall pass/fail
+            overall_pass = (crit_punching["passes"] and
+                           crit_oneway_x["passes"] and
+                           crit_oneway_y["passes"])
+
+            # Build node result (flattened structure)
+            results_data["nodes"][node_name] = {
+                # Coordinates
+                "x_m": geometry["x"],
+                "y_m": geometry["y"],
+                "z_m": geometry["z"],
+
+                # Footing geometry
+                "footing_width_B_m": geometry["B"],
+                "footing_length_L_m": geometry["L"],
+                "footing_thickness_H_m": geometry["H"],
+                "effective_depth_d_m": d,
+
+                # Pedestal geometry
+                "pedestal_width_b1_m": geometry["b1"],
+                "pedestal_length_b2_m": geometry["b2"],
+                "pedestal_height_ph_m": geometry["ph"],
+
+                # Foundation weights
+                "total_weight_kN": weights["total_weight"],
+                "slab_weight_kN": weights["slab_weight"],
+                "pedestal_weight_kN": weights["pedestal_weight"],
+                "fill_weight_kN": weights["fill_weight"],
+
+                # Punching shear (critical case)
+                "punching_critical_case": crit_punching["case_name"],
+                "punching_Vu_kN": crit_punching["Vu_kN"],
+                "punching_Vc_kN": crit_punching["Vc_min_kN"],
+                "punching_utilization": crit_punching["utilization"],
+                "punching_passes": crit_punching["passes"],
+
+                # One-way shear X (critical case)
+                "oneway_x_critical_case": crit_oneway_x["case_name"],
+                "oneway_x_Vu_kN": crit_oneway_x["Vu_kN"],
+                "oneway_x_Vc_kN": crit_oneway_x["Vc_kN"],
+                "oneway_x_utilization": crit_oneway_x["utilization"],
+                "oneway_x_passes": crit_oneway_x["passes"],
+
+                # One-way shear Y (critical case)
+                "oneway_y_critical_case": crit_oneway_y["case_name"],
+                "oneway_y_Vu_kN": crit_oneway_y["Vu_kN"],
+                "oneway_y_Vc_kN": crit_oneway_y["Vc_kN"],
+                "oneway_y_utilization": crit_oneway_y["utilization"],
+                "oneway_y_passes": crit_oneway_y["passes"],
+
+                # Flexure X direction (critical case)
+                "flexure_x_critical_case": crit_flexure_x["case_name"],
+                "flexure_x_As_req_mm2": crit_flexure_x["As_req_mm2"],
+                "flexure_x_Mu_kNm": crit_flexure_x["Mu_kNm"],
+
+                # Flexure Y direction (critical case)
+                "flexure_y_critical_case": crit_flexure_y["case_name"],
+                "flexure_y_As_req_mm2": crit_flexure_y["As_req_mm2"],
+                "flexure_y_Mu_kNm": crit_flexure_y["Mu_kNm"],
+
+                # Rebar spacing X
+                "rebar_x_number_of_bars": spacing["n_x"],
+                "rebar_x_spacing_c2c_mm": spacing["s_c2c_x"],
+                "rebar_x_spacing_clear_mm": spacing["s_clear_x"],
+
+                # Rebar spacing Y
+                "rebar_y_number_of_bars": spacing["n_y"],
+                "rebar_y_spacing_c2c_mm": spacing["s_c2c_y"],
+                "rebar_y_spacing_clear_mm": spacing["s_clear_y"],
+
+                # Overall status
+                "all_checks_pass": overall_pass,
+                "status_message": "All checks PASS" if overall_pass else "Some checks FAIL"
+            }
+
+        # Convert to JSON
+        json_str = json.dumps(results_data, indent=2)
+        json_bytes = BytesIO(json_str.encode('utf-8'))
+
+        return vkt.DownloadResult(vkt.File.from_data(json_bytes.getvalue()), 'footing_design_results.json')
 
     def create_geometry_lookup(self, params):
         # Build coordinate lookup
@@ -472,226 +684,80 @@ class Controller(vkt.Controller):
             })
         return loads_by_node
 
-    def build_node_loadcase_item(self, node_name, case_name, geometry, d, lc_result):
-        """Build a flattened data item for a single node-loadcase combination."""
-        lc_group = vkt.DataGroup()
+    def build_node_envelope_item(self, node_name, geometry, d, envelope_result):
+        """Build a data item showing envelope results across all load cases."""
+        node_group = vkt.DataGroup()
 
         # Geometry info
         g = geometry
-        lc_group.add(vkt.DataItem("Geometry", f"Footing {g['B']:.2f}×{g['L']:.2f}×{g['H']:.2f}m, Pedestal {g['b1']:.3f}×{g['b2']:.3f}×{g['ph']:.2f}m, d={d:.3f}m"))
+        node_group.add(vkt.DataItem("Geometry", f"Footing {g['B']:.2f}×{g['L']:.2f}×{g['H']:.2f}m, Pedestal {g['b1']:.3f}×{g['b2']:.3f}×{g['ph']:.2f}m, d={d:.3f}m"))
 
-        # Foundation weights (compact)
-        w = lc_result["weights"]
-        lc_group.add(vkt.DataItem("Total Weight", w["total_weight"], suffix="kN", number_of_decimals=1))
-        lc_group.add(vkt.DataItem("  (Slab+Pedestal+Fill)", f"{w['slab_weight']:.1f} + {w['pedestal_weight']:.1f} + {w['fill_weight']:.1f} kN"))
+        # Foundation weights (from first case, same for all)
+        w = envelope_result["weights"]
+        node_group.add(vkt.DataItem("Total Weight", w["total_weight"], suffix="kN", number_of_decimals=1))
+        node_group.add(vkt.DataItem("  (Slab+Pedestal+Fill)", f"{w['slab_weight']:.1f} + {w['pedestal_weight']:.1f} + {w['fill_weight']:.1f} kN"))
 
-        # Factored actions (key values only)
-        fa = lc_result["factored_actions"]
-        lc_group.add(vkt.DataItem("Fz (Axial)", abs(fa["Fz_footing"]), suffix="kN", number_of_decimals=1))
-        lc_group.add(vkt.DataItem("Eccentricity", f"ex={fa['ex']:.4f}m, ey={fa['ey']:.4f}m"))
-        lc_group.add(vkt.DataItem("Moments", f"Mx={fa['Mx_footing']:.1f} kN·m, My={fa['My_footing']:.1f} kN·m"))
-
-        # Punching shear
-        pu = lc_result["punching_shear"]
-        pu_status = vkt.DataStatus.SUCCESS if pu["passes"] else vkt.DataStatus.ERROR
-        util_pu = pu["Vu"] / pu["Vc_min"] if pu["Vc_min"] > 0 else 0.0
-        lc_group.add(vkt.DataItem(
+        # Punching shear - show critical LC
+        crit_punch = envelope_result["critical_punching"]
+        pu_status = vkt.DataStatus.SUCCESS if crit_punch["passes"] else vkt.DataStatus.ERROR
+        node_group.add(vkt.DataItem(
             "Punching Shear",
-            f"Vu={pu['Vu']:.1f} kN ≤ Vc={pu['Vc_min']:.1f} kN (Util={util_pu:.2f})",
+            f"Vu={crit_punch['Vu']:.1f} kN ≤ Vc={crit_punch['Vc_min']:.1f} kN (Util={crit_punch['util']:.2f})",
             status=pu_status,
-            status_message="PASS" if pu["passes"] else "FAIL"
+            status_message=f"{'PASS' if crit_punch['passes'] else 'FAIL'} - Critical LC: {crit_punch['case_name']}"
         ))
 
-        # One-way shear
-        ow = lc_result["one_way_shear"]
-        ow_status = vkt.DataStatus.SUCCESS if ow["passes"] else vkt.DataStatus.ERROR
-        lc_group.add(vkt.DataItem(
+        # One-way shear X - show critical LC
+        crit_ow_x = envelope_result["critical_oneway_x"]
+        ow_x_status = vkt.DataStatus.SUCCESS if crit_ow_x["passes"] else vkt.DataStatus.ERROR
+        node_group.add(vkt.DataItem(
             "One-Way Shear X",
-            f"Vu={ow['Vu_x']:.1f} kN ≤ Vc={ow['Vc_x']:.1f} kN (Util={ow['util_x']:.2f})",
-            status=ow_status if ow['Vu_x'] > ow['Vc_x'] else vkt.DataStatus.SUCCESS,
-            status_message="PASS" if ow['Vu_x'] <= ow['Vc_x'] else "FAIL"
+            f"Vu={crit_ow_x['Vu']:.1f} kN ≤ Vc={crit_ow_x['Vc']:.1f} kN (Util={crit_ow_x['util']:.2f})",
+            status=ow_x_status,
+            status_message=f"{'PASS' if crit_ow_x['passes'] else 'FAIL'} - Critical LC: {crit_ow_x['case_name']}"
         ))
-        lc_group.add(vkt.DataItem(
+
+        # One-way shear Y - show critical LC
+        crit_ow_y = envelope_result["critical_oneway_y"]
+        ow_y_status = vkt.DataStatus.SUCCESS if crit_ow_y["passes"] else vkt.DataStatus.ERROR
+        node_group.add(vkt.DataItem(
             "One-Way Shear Y",
-            f"Vu={ow['Vu_y']:.1f} kN ≤ Vc={ow['Vc_y']:.1f} kN (Util={ow['util_y']:.2f})",
-            status=ow_status if ow['Vu_y'] > ow['Vc_y'] else vkt.DataStatus.SUCCESS,
-            status_message="PASS" if ow['Vu_y'] <= ow['Vc_y'] else "FAIL"
+            f"Vu={crit_ow_y['Vu']:.1f} kN ≤ Vc={crit_ow_y['Vc']:.1f} kN (Util={crit_ow_y['util']:.2f})",
+            status=ow_y_status,
+            status_message=f"{'PASS' if crit_ow_y['passes'] else 'FAIL'} - Critical LC: {crit_ow_y['case_name']}"
         ))
 
-        # Flexure
-        fx = lc_result["flexure"]
-        lc_group.add(vkt.DataItem("Flexure X-dir", f"As_req={fx['As_req_x']:.0f} mm² (Mu={fx['Mu_x']:.1f} kN·m)"))
-        lc_group.add(vkt.DataItem("Flexure Y-dir", f"As_req={fx['As_req_y']:.0f} mm² (Mu={fx['Mu_y']:.1f} kN·m)"))
+        # Flexure X - show critical LC
+        crit_flex_x = envelope_result["critical_flexure_x"]
+        node_group.add(vkt.DataItem(
+            "Flexure X-dir (Design)",
+            f"As_req={crit_flex_x['As_req']:.0f} mm² (Mu={crit_flex_x['Mu']:.1f} kN·m)",
+            status_message=f"Critical LC: {crit_flex_x['case_name']}"
+        ))
 
-        # Rebar Spacing
-        sp = lc_result["spacing"]
-        lc_group.add(vkt.DataItem("Rebar Spacing X-dir", f"n={sp['n_x']} bars @ {sp['s_c2c_x']:.0f}mm c/c (clear={sp['s_clear_x']:.0f}mm)"))
-        lc_group.add(vkt.DataItem("Rebar Spacing Y-dir", f"n={sp['n_y']} bars @ {sp['s_c2c_y']:.0f}mm c/c (clear={sp['s_clear_y']:.0f}mm)"))
+        # Flexure Y - show critical LC
+        crit_flex_y = envelope_result["critical_flexure_y"]
+        node_group.add(vkt.DataItem(
+            "Flexure Y-dir (Design)",
+            f"As_req={crit_flex_y['As_req']:.0f} mm² (Mu={crit_flex_y['Mu']:.1f} kN·m)",
+            status_message=f"Critical LC: {crit_flex_y['case_name']}"
+        ))
 
-        overall_status = vkt.DataStatus.SUCCESS if lc_result["overall_pass"] else vkt.DataStatus.ERROR
-        status_msg = "All checks PASS" if lc_result["overall_pass"] else "Some checks FAIL"
+        # Rebar Spacing (based on envelope As_req)
+        sp = envelope_result["spacing"]
+        node_group.add(vkt.DataItem("Rebar Spacing X-dir", f"n={sp['n_x']} bars @ {sp['s_c2c_x']:.0f}mm c/c (clear={sp['s_clear_x']:.0f}mm)"))
+        node_group.add(vkt.DataItem("Rebar Spacing Y-dir", f"n={sp['n_y']} bars @ {sp['s_c2c_y']:.0f}mm c/c (clear={sp['s_clear_y']:.0f}mm)"))
+
+        overall_status = vkt.DataStatus.SUCCESS if envelope_result["overall_pass"] else vkt.DataStatus.ERROR
+        status_msg = "All checks PASS" if envelope_result["overall_pass"] else "Some checks FAIL"
 
         return vkt.DataItem(
-            f"{node_name} - {case_name}",
-            subgroup=lc_group,
+            node_name,
+            subgroup=node_group,
             status=overall_status,
             status_message=status_msg
         )
 
-    @vkt.DataView("Design Check Results", duration_guess=5)
-    def view_design_results(self, params, **kwargs):
-
-        geometry_by_node = self.create_geometry_lookup(params)
-        loads_by_node = self.create_loads_lookup(params)
-
-        fc = params.section_concrete.fc
-        fy = params.section_concrete.fy
-        gamma_concrete = params.section_concrete.gamma_concrete
-        gamma_fill = params.section_concrete.gamma_fill
-        cover = params.section_concrete.cover
-        db = params.section_concrete.db
-
-        main_group = vkt.DataGroup()
-
-        # Flatten structure: each node-loadcase becomes a top-level item
-        for node_name, geometry in geometry_by_node.items():
-            if node_name not in loads_by_node:
-                warning_group = vkt.DataGroup()
-                warning_group.add(vkt.DataItem("Status", "No load cases defined"))
-                main_group.add(vkt.DataItem(node_name, subgroup=warning_group, status=vkt.DataStatus.WARNING))
-                continue
-
-            d = calculate_effective_depth(geometry["H"], cover, db)
-
-            weights = calculate_foundation_weights(
-                geometry["B"], geometry["L"], geometry["H"],
-                geometry["b1"], geometry["b2"], geometry["ph"],
-                gamma_concrete, gamma_fill
-            )
-
-            for lc in loads_by_node[node_name]:
-                if abs(lc["F3"]) < 1e-9:
-                    continue
-
-                factored = calculate_factored_actions(lc, weights["total_weight"], geometry["ph"], geometry["H"])
-
-                punch = check_punching_shear(
-                    factored["Fz_footing"], geometry["B"], geometry["L"],
-                    geometry["b1"], geometry["b2"], d, fc,
-                )
-
-                oneway = check_one_way_shear(
-                    factored["Fz_footing"], geometry["B"], geometry["L"],
-                    geometry["b1"], geometry["b2"], d, fc,
-                )
-
-                flex = calculate_required_rebar(
-                    factored["Fz_footing"], geometry["B"], geometry["L"],
-                    geometry["b1"], geometry["b2"], d, geometry["H"], fc, fy,
-                )
-
-                spacing = calculate_rebar_spacing_strip_method(
-                    geometry["B"], geometry["L"], geometry["H"],
-                    cover_mm=cover, db_mm=db,
-                    As_req_x=flex["As_req_x"], As_req_y=flex["As_req_y"],
-                )
-
-                combo_pass = punch["passes"] and oneway["passes"]
-
-                lc_result = {
-                    "case_name": lc["case_name"],
-                    "weights": weights,
-                    "factored_actions": factored,
-                    "punching_shear": punch,
-                    "one_way_shear": oneway,
-                    "flexure": flex,
-                    "spacing": spacing,
-                    "overall_pass": combo_pass,
-                }
-
-                main_group.add(self.build_node_loadcase_item(node_name, lc["case_name"], geometry, d, lc_result))
-
-        return vkt.DataResult(main_group)
-
-    @vkt.WebView("Calculation Report", duration_guess=10)
-    def view_calculation_report(self, params, **kwargs):
-        """Display Mathcad-like calculation report with equations and results"""
-
-        geometry_by_node = self.create_geometry_lookup(params)
-        loads_by_node = self.create_loads_lookup(params)
-
-        fc = params.section_concrete.fc
-        fy = params.section_concrete.fy
-        gamma_concrete = params.section_concrete.gamma_concrete
-        gamma_fill = params.section_concrete.gamma_fill
-        cover = params.section_concrete.cover
-        db = params.section_concrete.db
-
-        # Store results for each node-loadcase combination
-        results_by_node_lc = {}
-
-        # Process all node-loadcase combinations
-        for node_name, geometry in geometry_by_node.items():
-            if node_name not in loads_by_node:
-                continue
-
-            d = calculate_effective_depth(geometry["H"], cover, db)
-
-            weights = calculate_foundation_weights(
-                geometry["B"], geometry["L"], geometry["H"],
-                geometry["b1"], geometry["b2"], geometry["ph"],
-                gamma_concrete, gamma_fill
-            )
-
-            for lc in loads_by_node[node_name]:
-                if abs(lc["F3"]) < 1e-9:
-                    continue
-
-                factored = calculate_factored_actions(lc, weights["total_weight"], geometry["ph"], geometry["H"])
-
-                punch = check_punching_shear(
-                    factored["Fz_footing"], geometry["B"], geometry["L"],
-                    geometry["b1"], geometry["b2"], d, fc,
-                )
-
-                oneway = check_one_way_shear(
-                    factored["Fz_footing"], geometry["B"], geometry["L"],
-                    geometry["b1"], geometry["b2"], d, fc,
-                )
-
-                flex = calculate_required_rebar(
-                    factored["Fz_footing"], geometry["B"], geometry["L"],
-                    geometry["b1"], geometry["b2"], d, geometry["H"], fc, fy,
-                )
-
-                spacing = calculate_rebar_spacing_strip_method(
-                    geometry["B"], geometry["L"], geometry["H"],
-                    cover_mm=cover, db_mm=db,
-                    As_req_x=flex["As_req_x"], As_req_y=flex["As_req_y"],
-                )
-
-                combo_pass = punch["passes"] and oneway["passes"]
-
-                results_by_node_lc[(node_name, lc["case_name"])] = {
-                    "weights": weights,
-                    "factored_actions": factored,
-                    "punching_shear": punch,
-                    "one_way_shear": oneway,
-                    "flexure": flex,
-                    "spacing": spacing,
-                    "overall_pass": combo_pass,
-                }
-
-        # Build HTML report
-        html = report_template.get_report_header()
-        html += report_template.format_design_parameters(fc, fy, gamma_concrete, gamma_fill, cover, db)
-        html += report_template.get_design_equations()
-        html += report_template.format_node_geometry_table(geometry_by_node)
-        html += report_template.format_load_cases_table(loads_by_node)
-        html += report_template.format_design_results(results_by_node_lc)
-        html += report_template.get_report_footer()
-
-        return vkt.WebResult(html=html)
 
     @vkt.PlotlyView("Footing Plan View - Critical Zones", duration_guess=5)
     def view_footing_plan(self, params, **kwargs):
@@ -963,3 +1029,142 @@ class Controller(vkt.Controller):
         )
 
         return vkt.PlotlyResult(fig.to_json())
+    @vkt.WebView("Calculation Report", duration_guess=10)
+    def view_calculation_report(self, params, **kwargs):
+        """Display Mathcad-like calculation report with equations and results"""
+
+        geometry_by_node = self.create_geometry_lookup(params)
+        loads_by_node = self.create_loads_lookup(params)
+
+        fc = params.section_concrete.fc
+        fy = params.section_concrete.fy
+        gamma_concrete = params.section_concrete.gamma_concrete
+        gamma_fill = params.section_concrete.gamma_fill
+        cover = params.section_concrete.cover
+        db = params.section_concrete.db
+
+        # Store envelope results for each node
+        envelope_by_node = {}
+
+        # Process all nodes and calculate envelopes
+        for node_name, geometry in geometry_by_node.items():
+            if node_name not in loads_by_node:
+                continue
+
+            d = calculate_effective_depth(geometry["H"], cover, db)
+
+            weights = calculate_foundation_weights(
+                geometry["B"], geometry["L"], geometry["H"],
+                geometry["b1"], geometry["b2"], geometry["ph"],
+                gamma_concrete, gamma_fill
+            )
+
+            # Track critical cases
+            crit_punching = None
+            crit_oneway_x = None
+            crit_oneway_y = None
+            crit_flexure_x = None
+            crit_flexure_y = None
+
+            # Loop through all load cases for this node
+            for lc in loads_by_node[node_name]:
+                if abs(lc["F3"]) < 1e-9:
+                    continue
+
+                factored = calculate_factored_actions(lc, weights["total_weight"], geometry["ph"], geometry["H"])
+
+                punch = check_punching_shear(
+                    factored["Fz_footing"], geometry["B"], geometry["L"],
+                    geometry["b1"], geometry["b2"], d, fc,
+                )
+
+                oneway = check_one_way_shear(
+                    factored["Fz_footing"], geometry["B"], geometry["L"],
+                    geometry["b1"], geometry["b2"], d, fc,
+                )
+
+                flex = calculate_required_rebar(
+                    factored["Fz_footing"], geometry["B"], geometry["L"],
+                    geometry["b1"], geometry["b2"], d, geometry["H"], fc, fy,
+                )
+
+                # Track critical punching shear (highest utilization)
+                punch_util = punch["Vu"] / punch["Vc_min"] if punch["Vc_min"] > 0 else 0.0
+                if crit_punching is None or punch_util > crit_punching["util"]:
+                    crit_punching = {
+                        "case_name": lc["case_name"],
+                        "Vu": punch["Vu"],
+                        "Vc_min": punch["Vc_min"],
+                        "util": punch_util,
+                        "passes": punch["passes"],
+                    }
+
+                # Track critical one-way shear X
+                if crit_oneway_x is None or oneway["util_x"] > crit_oneway_x["util"]:
+                    crit_oneway_x = {
+                        "case_name": lc["case_name"],
+                        "Vu": oneway["Vu_x"],
+                        "Vc": oneway["Vc_x"],
+                        "util": oneway["util_x"],
+                        "passes": oneway["Vu_x"] <= oneway["Vc_x"],
+                    }
+
+                # Track critical one-way shear Y
+                if crit_oneway_y is None or oneway["util_y"] > crit_oneway_y["util"]:
+                    crit_oneway_y = {
+                        "case_name": lc["case_name"],
+                        "Vu": oneway["Vu_y"],
+                        "Vc": oneway["Vc_y"],
+                        "util": oneway["util_y"],
+                        "passes": oneway["Vu_y"] <= oneway["Vc_y"],
+                    }
+
+                # Track critical flexure X (highest As_req)
+                if crit_flexure_x is None or flex["As_req_x"] > crit_flexure_x["As_req"]:
+                    crit_flexure_x = {
+                        "case_name": lc["case_name"],
+                        "As_req": flex["As_req_x"],
+                        "Mu": flex["Mu_x"],
+                    }
+
+                # Track critical flexure Y (highest As_req)
+                if crit_flexure_y is None or flex["As_req_y"] > crit_flexure_y["As_req"]:
+                    crit_flexure_y = {
+                        "case_name": lc["case_name"],
+                        "As_req": flex["As_req_y"],
+                        "Mu": flex["Mu_y"],
+                    }
+
+            # Calculate spacing based on envelope As_req
+            spacing = calculate_rebar_spacing_strip_method(
+                geometry["B"], geometry["L"], geometry["H"],
+                cover_mm=cover, db_mm=db,
+                As_req_x=crit_flexure_x["As_req"], As_req_y=crit_flexure_y["As_req"],
+            )
+
+            # Overall pass/fail
+            overall_pass = (crit_punching["passes"] and
+                           crit_oneway_x["passes"] and
+                           crit_oneway_y["passes"])
+
+            envelope_by_node[node_name] = {
+                "weights": weights,
+                "critical_punching": crit_punching,
+                "critical_oneway_x": crit_oneway_x,
+                "critical_oneway_y": crit_oneway_y,
+                "critical_flexure_x": crit_flexure_x,
+                "critical_flexure_y": crit_flexure_y,
+                "spacing": spacing,
+                "overall_pass": overall_pass,
+            }
+
+        # Build HTML report
+        html = report_template.get_report_header()
+        html += report_template.format_design_parameters(fc, fy, gamma_concrete, gamma_fill, cover, db)
+        html += report_template.get_design_equations()
+        html += report_template.format_node_geometry_table(geometry_by_node)
+        html += report_template.format_load_cases_table(loads_by_node)
+        html += report_template.format_envelope_results(envelope_by_node)
+        html += report_template.get_report_footer()
+
+        return vkt.WebResult(html=html)

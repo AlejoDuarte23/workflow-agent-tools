@@ -390,3 +390,65 @@ def format_design_results(results_by_node_lc):
         </div>
 """
     return html
+
+
+def format_envelope_results(envelope_by_node):
+    """Format envelope results showing critical load cases for each node"""
+    html = """
+        <div class="section">
+            <h2>Design Check Results - Envelope of All Load Cases</h2>
+            <p style="color: #666; font-style: italic;">Each node shows the governing load case for each check type.</p>
+"""
+
+    for node_name, result in envelope_by_node.items():
+        overall_pass = result['overall_pass']
+        row_class = 'pass' if overall_pass else 'fail'
+        status_class = 'check-pass' if overall_pass else 'check-fail'
+        status_text = 'PASS' if overall_pass else 'FAIL'
+
+        html += f"""
+        <div class="result-box {row_class}">
+            <h3>{node_name} <span class="check-status {status_class}">{status_text}</span></h3>
+
+            <p><strong>Foundation Weights:</strong></p>
+            <ul>
+                <li>Total Weight = {result['weights']['total_weight']:.1f} kN</li>
+                <li>Slab + Pedestal + Fill = {result['weights']['slab_weight']:.1f} + {result['weights']['pedestal_weight']:.1f} + {result['weights']['fill_weight']:.1f} kN</li>
+            </ul>
+
+            <p><strong>Two-Way Shear (Punching) - <span style="color: #d32f2f;">Critical LC: {result['critical_punching']['case_name']}</span>:</strong></p>
+            <ul>
+                <li>V<sub>u</sub> = {result['critical_punching']['Vu']:.1f} kN</li>
+                <li>φV<sub>c</sub> = {result['critical_punching']['Vc_min']:.1f} kN</li>
+                <li>Utilization = {result['critical_punching']['util']:.3f}</li>
+                <li><span class="check-status {'check-pass' if result['critical_punching']['passes'] else 'check-fail'}">{'PASS' if result['critical_punching']['passes'] else 'FAIL'}</span></li>
+            </ul>
+
+            <p><strong>One-Way Shear:</strong></p>
+            <ul>
+                <li><strong>X-direction - <span style="color: #d32f2f;">Critical LC: {result['critical_oneway_x']['case_name']}</span>:</strong> V<sub>u</sub> = {result['critical_oneway_x']['Vu']:.1f} kN, φV<sub>c</sub> = {result['critical_oneway_x']['Vc']:.1f} kN, Util = {result['critical_oneway_x']['util']:.3f}
+                    <span class="check-status {'check-pass' if result['critical_oneway_x']['passes'] else 'check-fail'}">{'PASS' if result['critical_oneway_x']['passes'] else 'FAIL'}</span>
+                </li>
+                <li><strong>Y-direction - <span style="color: #d32f2f;">Critical LC: {result['critical_oneway_y']['case_name']}</span>:</strong> V<sub>u</sub> = {result['critical_oneway_y']['Vu']:.1f} kN, φV<sub>c</sub> = {result['critical_oneway_y']['Vc']:.1f} kN, Util = {result['critical_oneway_y']['util']:.3f}
+                    <span class="check-status {'check-pass' if result['critical_oneway_y']['passes'] else 'check-fail'}">{'PASS' if result['critical_oneway_y']['passes'] else 'FAIL'}</span>
+                </li>
+            </ul>
+
+            <p><strong>Flexure - Required Reinforcement (Design Envelope):</strong></p>
+            <ul>
+                <li><strong>X-direction - <span style="color: #d32f2f;">Critical LC: {result['critical_flexure_x']['case_name']}</span>:</strong> A<sub>s,req</sub> = {result['critical_flexure_x']['As_req']:.0f} mm² (M<sub>u</sub> = {result['critical_flexure_x']['Mu']:.1f} kN·m)</li>
+                <li><strong>Y-direction - <span style="color: #d32f2f;">Critical LC: {result['critical_flexure_y']['case_name']}</span>:</strong> A<sub>s,req</sub> = {result['critical_flexure_y']['As_req']:.0f} mm² (M<sub>u</sub> = {result['critical_flexure_y']['Mu']:.1f} kN·m)</li>
+            </ul>
+
+            <p><strong>Rebar Spacing (Based on Envelope):</strong></p>
+            <ul>
+                <li><strong>X-direction:</strong> {result['spacing']['n_x']} bars @ {result['spacing']['s_c2c_x']:.0f} mm c/c (clear = {result['spacing']['s_clear_x']:.0f} mm)</li>
+                <li><strong>Y-direction:</strong> {result['spacing']['n_y']} bars @ {result['spacing']['s_c2c_y']:.0f} mm c/c (clear = {result['spacing']['s_clear_y']:.0f} mm)</li>
+            </ul>
+        </div>
+"""
+
+    html += """
+        </div>
+"""
+    return html
