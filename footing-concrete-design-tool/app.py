@@ -293,6 +293,47 @@ def calculate_required_rebar(Fz_footing, B, L, b1, b2, d, H, fc, fy):
     }
 
 
+def calculate_rebar_spacing_strip_method(B, L, H, cover_mm, db_mm, As_req_x, As_req_y):
+    """
+    Strip method spacing (matches your screenshots):
+
+    n = ceil(As_target / Ab)
+    s_clear = ((strip_len*1000) - 2*cc - n*db) / (n-1)
+    s_c2c = s_clear + db
+
+    Where:
+      As_target = max(As_min, As_required) is already handled upstream by As_req_x / As_req_y
+      X-dir uses strip length = L
+      Y-dir uses strip length = B
+
+    Returns spacing in mm and #bars for each direction.
+    """
+    # bar area (mm²)
+    Ab = math.pi * (db_mm ** 2) / 4.0
+
+    # helper
+    def _dir(As_target_mm2, strip_len_m):
+        n = max(2, math.ceil(As_target_mm2 / Ab))  # at least 2 bars to define spacing
+        strip_len_mm = strip_len_m * 1000.0
+
+        s_clear = (strip_len_mm - 2.0 * cover_mm - n * db_mm) / (n - 1)
+        s_c2c = s_clear + db_mm
+        return n, s_clear, s_c2c
+
+    n_x, s_clear_x, s_c2c_x = _dir(As_req_x, L)  # X-dir along B -> distributed across L
+    n_y, s_clear_y, s_c2c_y = _dir(As_req_y, B)  # Y-dir along L -> distributed across B
+
+    return {
+        "Ab": Ab,
+        "n_x": n_x,
+        "s_clear_x": s_clear_x,
+        "s_c2c_x": s_c2c_x,
+        "n_y": n_y,
+        "s_clear_y": s_clear_y,
+        "s_c2c_y": s_c2c_y,
+    }
+
+
 # ==============================================
 # PARAMETRIZATION CLASS
 # ==============================================
@@ -305,10 +346,10 @@ class Parametrization(vkt.Parametrization):
 Checks:
 - Foundation weights (slab + pedestal + optional fill)
 - Factored actions at footing slab level (centroid)
-- Bearing pressure (full-contact / partial-contact effective area)
 - Two-way shear (punching)
 - One-way shear
 - Flexure (required As)
+- Rebar spacing
 """)
 
     section_geometry = vkt.Section("Node Geometry & Dimensions")
@@ -356,8 +397,6 @@ Checks:
     section_concrete.cover = vkt.NumberField("Concrete Cover", default=90, min=0, suffix="mm", num_decimals=0)
     section_concrete.db = vkt.NumberField("Rebar Diameter (db)", default=12, min=0, suffix="mm", num_decimals=0)
 
-    section_soil = vkt.Section("Soil Properties")
-    section_soil.qa = vkt.NumberField("Allowable Bearing Capacity (q_allow)", default=190.0, min=0.0, suffix="kPa", num_decimals=1)
 
 
 # ==============================================
@@ -406,16 +445,6 @@ class Controller(vkt.Controller):
         lc_group.add(vkt.DataItem("Eccentricity", f"ex={fa['ex']:.4f}m, ey={fa['ey']:.4f}m"))
         lc_group.add(vkt.DataItem("Moments", f"Mx={fa['Mx_footing']:.1f} kN·m, My={fa['My_footing']:.1f} kN·m"))
 
-        # Bearing pressure
-        br = lc_result["bearing"]
-        br_status = vkt.DataStatus.SUCCESS if br["passes"] else vkt.DataStatus.ERROR
-        lc_group.add(vkt.DataItem(
-            "Bearing Check",
-            f"{br['case']}: qmax={br['qmax']:.1f} kPa ≤ {lc_result['q_allow']:.1f} kPa",
-            status=br_status,
-            status_message="PASS" if br["passes"] else "FAIL"
-        ))
-
         # Punching shear
         pu = lc_result["punching_shear"]
         pu_status = vkt.DataStatus.SUCCESS if pu["passes"] else vkt.DataStatus.ERROR
@@ -448,6 +477,11 @@ class Controller(vkt.Controller):
         lc_group.add(vkt.DataItem("Flexure X-dir", f"As_req={fx['As_req_x']:.0f} mm² (Mu={fx['Mu_x']:.1f} kN·m)"))
         lc_group.add(vkt.DataItem("Flexure Y-dir", f"As_req={fx['As_req_y']:.0f} mm² (Mu={fx['Mu_y']:.1f} kN·m)"))
 
+        # Rebar Spacing
+        sp = lc_result["spacing"]
+        lc_group.add(vkt.DataItem("Rebar Spacing X-dir", f"n={sp['n_x']} bars @ {sp['s_c2c_x']:.0f}mm c/c (clear={sp['s_clear_x']:.0f}mm)"))
+        lc_group.add(vkt.DataItem("Rebar Spacing Y-dir", f"n={sp['n_y']} bars @ {sp['s_c2c_y']:.0f}mm c/c (clear={sp['s_clear_y']:.0f}mm)"))
+
         overall_status = vkt.DataStatus.SUCCESS if lc_result["overall_pass"] else vkt.DataStatus.ERROR
         status_msg = "All checks PASS" if lc_result["overall_pass"] else "Some checks FAIL"
 
@@ -470,8 +504,6 @@ class Controller(vkt.Controller):
         gamma_fill = params.section_concrete.gamma_fill
         cover = params.section_concrete.cover
         db = params.section_concrete.db
-
-        q_allow = params.section_soil.qa  # kPa
 
         main_group = vkt.DataGroup()
 
@@ -497,13 +529,6 @@ class Controller(vkt.Controller):
 
                 factored = calculate_factored_actions(lc, weights["total_weight"], geometry["ph"], geometry["H"])
 
-                bearing = bearing_pressure_check_full_partial(
-                    factored["Fz_footing"],
-                    geometry["B"], geometry["L"],
-                    factored["ex"], factored["ey"],
-                    q_allow_kPa=q_allow,
-                )
-
                 punch = check_punching_shear(
                     factored["Fz_footing"], geometry["B"], geometry["L"],
                     geometry["b1"], geometry["b2"], d, fc,
@@ -519,17 +544,22 @@ class Controller(vkt.Controller):
                     geometry["b1"], geometry["b2"], d, geometry["H"], fc, fy,
                 )
 
-                combo_pass = bearing["passes"] and punch["passes"] and oneway["passes"]
+                spacing = calculate_rebar_spacing_strip_method(
+                    geometry["B"], geometry["L"], geometry["H"],
+                    cover_mm=cover, db_mm=db,
+                    As_req_x=flex["As_req_x"], As_req_y=flex["As_req_y"],
+                )
+
+                combo_pass = punch["passes"] and oneway["passes"]
 
                 lc_result = {
                     "case_name": lc["case_name"],
                     "weights": weights,
                     "factored_actions": factored,
-                    "bearing": bearing,
-                    "q_allow": q_allow,
                     "punching_shear": punch,
                     "one_way_shear": oneway,
                     "flexure": flex,
+                    "spacing": spacing,
                     "overall_pass": combo_pass,
                 }
 
