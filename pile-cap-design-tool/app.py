@@ -456,14 +456,14 @@ This tool evaluates axial pile capacity for the existing 3-pile cap layout and c
     reaction_loads_section.load_cases = vkt.Table(
         "Reaction Loads",
         default=[
-            {"case_name": "LC1", "node": "N1", "F1": 0.0, "F2": 0.0, "F3": 2400.0, "M1": 0.0, "M2": 0.0, "M3": 0.0},
-            {"case_name": "LC2", "node": "N1", "F1": 50.0, "F2": 30.0, "F3": 2600.0, "M1": 100.0, "M2": 80.0, "M3": 0.0},
-            {"case_name": "LC1", "node": "N2", "F1": 0.0, "F2": 0.0, "F3": -2400.0, "M1": 0.0, "M2": 0.0, "M3": 0.0},
-            {"case_name": "LC2", "node": "N2", "F1": 50.0, "F2": 30.0, "F3": 2600.0, "M1": 100.0, "M2": 80.0, "M3": 0.0},
-            {"case_name": "LC1", "node": "N3", "F1": 0.0, "F2": 0.0, "F3": 2400.0, "M1": 0.0, "M2": 0.0, "M3": 0.0},
-            {"case_name": "LC2", "node": "N3", "F1": 50.0, "F2": 30.0, "F3": 2600.0, "M1": 100.0, "M2": 80.0, "M3": 0.0},
-            {"case_name": "LC1", "node": "N4", "F1": 0.0, "F2": 0.0, "F3": 2400.0, "M1": 0.0, "M2": 0.0, "M3": 0.0},
-            {"case_name": "LC2", "node": "N4", "F1": 50.0, "F2": 30.0, "F3": 2600.0, "M1": 100.0, "M2": 80.0, "M3": 0.0},
+            {"case_name": "LC1", "node": "N1", "F1": 0.0, "F2": 0.0, "F3": 15.0, "M1": 10.0, "M2": 8.0, "M3": 0.0},
+            {"case_name": "LC2", "node": "N1", "F1": 5.0, "F2": 3.0, "F3": 18.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
+            {"case_name": "LC1", "node": "N2", "F1": 0.0, "F2": 0.0, "F3": 20.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
+            {"case_name": "LC2", "node": "N2", "F1": 8.0, "F2": 4.0, "F3": 23.0, "M1": 20.0, "M2": 18.0, "M3": 0.0},
+            {"case_name": "LC1", "node": "N3", "F1": 0.0, "F2": 0.0, "F3": 20.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
+            {"case_name": "LC2", "node": "N3", "F1": 8.0, "F2": 4.0, "F3": 23.0, "M1": 20.0, "M2": 18.0, "M3": 0.0},
+            {"case_name": "LC1", "node": "N4", "F1": 0.0, "F2": 0.0, "F3": 15.0, "M1": 10.0, "M2": 8.0, "M3": 0.0},
+            {"case_name": "LC2", "node": "N4", "F1": 5.0, "F2": 3.0, "F3": 18.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
         ],
     )
     reaction_loads_section.load_cases.case_name = vkt.TextField("Load Case Name")
@@ -602,7 +602,7 @@ This tool evaluates axial pile capacity for the existing 3-pile cap layout and c
     )
     soil_section.soil_notes = vkt.TextField(
         "Notes",
-        default="Uniform frictional soil profile assumed over the full pile length for this model.",
+        default="",
         description="Additional notes about soil conditions",
     )
 
@@ -912,59 +912,33 @@ class Controller(vkt.Controller):
             <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
             <style>
                 body {{
-                    font-family: Arial, Helvetica, sans-serif;
-                    margin: 0;
-                    background: #f3f5f7;
-                    color: #111827;
+                    font-family: 'Arial', 'Helvetica', sans-serif;
+                    margin: 20px;
+                    background-color: #ffffff;
+                    color: #000000;
                 }}
                 .container {{
                     max-width: 1240px;
                     margin: 0 auto;
-                    padding: 24px;
+                    background-color: white;
+                    padding: 20px;
                 }}
-                .hero {{
-                    background: #ffffff;
-                    border: 1px solid #d1d5db;
-                    border-radius: 14px;
-                    padding: 28px;
-                    margin-bottom: 24px;
+                .section {{
+                    margin: 30px 0;
                 }}
                 .grid {{
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-                    gap: 16px;
-                    margin-bottom: 24px;
+                    gap: 20px;
                 }}
-                .card {{
-                    background: #ffffff;
-                    border: 1px solid #d1d5db;
-                    border-radius: 14px;
-                    padding: 20px;
-                    margin-bottom: 24px;
+                .equation-list div {{
+                    margin-bottom: 10px;
                 }}
-                .metrics {{
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-                    gap: 14px;
-                    margin-top: 16px;
-                }}
-                .metric {{
-                    background: #f9fafb;
-                    border: 1px solid #e5e7eb;
-                    border-radius: 10px;
-                    padding: 14px;
-                }}
-                .metric-label {{
-                    font-size: 12px;
-                    text-transform: uppercase;
-                    color: #6b7280;
-                    margin-bottom: 6px;
-                    letter-spacing: 0.04em;
-                }}
-                .metric-value {{
-                    font-size: 24px;
-                    font-weight: 700;
-                    color: #111827;
+                .input-params {{
+                    background-color: #f5f5f5;
+                    padding: 15px;
+                    border-left: 3px solid #666666;
+                    margin: 10px 0;
                 }}
                 .status {{
                     display: inline-block;
@@ -987,16 +961,25 @@ class Controller(vkt.Controller):
                     color: #92400e;
                 }}
                 h1 {{
-                    margin: 0 0 8px;
-                    font-size: 30px;
+                    color: #000000;
+                    border-bottom: 2px solid #000000;
+                    padding-bottom: 10px;
+                    font-size: 24px;
+                    font-weight: bold;
                 }}
                 h2 {{
-                    margin-top: 0;
-                    font-size: 22px;
+                    color: #000000;
+                    margin-top: 30px;
+                    border-bottom: 1px solid #666666;
+                    padding-bottom: 5px;
+                    font-size: 18px;
+                    font-weight: bold;
                 }}
                 h3 {{
+                    color: #333333;
+                    margin-top: 20px;
                     font-size: 16px;
-                    margin-top: 0;
+                    font-weight: bold;
                 }}
                 p {{
                     line-height: 1.5;
@@ -1004,74 +987,52 @@ class Controller(vkt.Controller):
                 table {{
                     width: 100%;
                     border-collapse: collapse;
-                    margin-top: 12px;
+                    margin: 15px 0;
+                    border: 1px solid #cccccc;
                 }}
                 th, td {{
-                    padding: 12px 10px;
-                    border-bottom: 1px solid #e5e7eb;
+                    padding: 10px 8px;
+                    border: 1px solid #cccccc;
                     text-align: left;
                     vertical-align: top;
                 }}
                 th {{
+                    background-color: #e0e0e0;
+                    color: #000000;
                     font-size: 12px;
                     text-transform: uppercase;
-                    color: #6b7280;
                     letter-spacing: 0.04em;
-                    background: #f9fafb;
+                    font-weight: bold;
                 }}
                 .equation-block {{
-                    background: #f9fafb;
-                    border: 1px solid #e5e7eb;
-                    border-radius: 10px;
-                    padding: 16px;
-                    margin-top: 12px;
+                    background-color: #f5f5f5;
+                    padding: 15px;
+                    margin: 15px 0;
+                    border-left: 3px solid #666666;
                 }}
                 .equation-note {{
-                    color: #4b5563;
+                    color: #666666;
                     font-size: 14px;
                     margin-top: 10px;
+                    font-style: italic;
                 }}
                 ul {{
                     padding-left: 20px;
                     margin-bottom: 0;
                 }}
-                .mono {{
-                    font-family: Menlo, Consolas, monospace;
+                tr:nth-child(even) {{
+                    background-color: #f9f9f9;
                 }}
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="hero">
-                    <h1>Pile Axial Capacity Report</h1>
-                    <p>Single-pile and 3-pile group axial capacities are evaluated from the soil profile and compared directly against each row in the reaction loads table using \\(P = |F_3|\\).</p>
-                    <div class="metrics">
-                        <div class="metric">
-                            <div class="metric-label">Allowable Single Pile Capacity</div>
-                            <div class="metric-value">{capacity['allowable_single_kN']:.2f} kN</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Allowable 3-Pile Group Capacity</div>
-                            <div class="metric-value">{allowable_group_display}</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Group Efficiency Coefficient</div>
-                            <div class="metric-value">{group_efficiency['efficiency']:.3f}</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Computed Allowable Bearing</div>
-                            <div class="metric-value">{capacity['allowable_bearing_kPa']:.2f} kPa</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Total Absolute Axial Demand</div>
-                            <div class="metric-value">{total_axial_demand_kN:.2f} kN</div>
-                        </div>
-                    </div>
-                </div>
+                <h1>Pile Axial Capacity Report</h1>
+                <p>Single-pile and 3-pile group axial capacities are evaluated from the soil profile and compared directly against each row in the reaction loads table using \\(P = |F_3|\\).</p>
 
-                <div class="card">
+                <div class="section">
                     <h2>Design Inputs</h2>
-                    <div class="grid">
+                    <div class="input-params grid">
                         <div>
                             <h3>Pile Geometry</h3>
                             <p><strong>Diameter:</strong> {pile_diameter_mm:.0f} mm</p>
@@ -1102,53 +1063,35 @@ class Controller(vkt.Controller):
                     </div>
                 </div>
 
-                <div class="card">
+                <div class="section">
                     <h2>Derived Geotechnical Parameters</h2>
-                    <div class="grid">
-                        <div class="metric">
-                            <div class="metric-label">Earth Pressure Coefficient K</div>
-                            <div class="metric-value">{capacity['earth_pressure_coefficient']:.3f}</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Interface Angle delta</div>
-                            <div class="metric-value">{capacity['delta_deg']:.2f} deg</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Beta</div>
-                            <div class="metric-value">{capacity['beta']:.3f}</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Bearing Factor Nq</div>
-                            <div class="metric-value">{capacity['nq']:.3f}</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Converse-Labarre theta_h</div>
-                            <div class="metric-value">{group_efficiency['theta_h_deg']:.2f} deg</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Converse-Labarre theta_v</div>
-                            <div class="metric-value">{group_efficiency['theta_v_deg']:.2f} deg</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Base Area Ab</div>
-                            <div class="metric-value">{capacity['base_area_m2']:.4f} m^2</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Shaft Area As</div>
-                            <div class="metric-value">{capacity['shaft_area_m2']:.4f} m^2</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Sigma v at Tip</div>
-                            <div class="metric-value">{capacity['sigma_v_tip_kPa']:.2f} kPa</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Average Sigma v along Shaft</div>
-                            <div class="metric-value">{capacity['sigma_v_avg_kPa']:.2f} kPa</div>
-                        </div>
+                    <div class="equation-block equation-list">
+                        <div>$$K = 1 - \\sin(\\phi) = 1 - \\sin({soil.friction_angle_deg:.2f}^\\circ) = {capacity['earth_pressure_coefficient']:.3f}$$</div>
+                        <div>$$\\delta = 0.67\\phi = 0.67 \\times {soil.friction_angle_deg:.2f}^\\circ = {capacity['delta_deg']:.2f}^\\circ$$</div>
+                        <div>$$\\beta = K\\tan(\\delta) = {capacity['earth_pressure_coefficient']:.3f} \\times \\tan({capacity['delta_deg']:.2f}^\\circ) = {capacity['beta']:.3f}$$</div>
+                        <div>$$N_q = e^{{\\pi\\tan\\phi}}\\tan^2\\left(45^\\circ + \\frac{{\\phi}}{{2}}\\right) = {capacity['nq']:.3f}$$</div>
+                        <div>$$\\sigma_{{v,tip}} = \\gamma L = {soil.unit_weight_kN_m3:.2f} \\times {capacity['length_m']:.3f} = {capacity['sigma_v_tip_kPa']:.2f}\\ \\text{{kPa}}$$</div>
+                        <div>$$\\sigma_{{v,avg}} = \\frac{{\\gamma L}}{{2}} = \\frac{{{soil.unit_weight_kN_m3:.2f} \\times {capacity['length_m']:.3f}}}{{2}} = {capacity['sigma_v_avg_kPa']:.2f}\\ \\text{{kPa}}$$</div>
+                        <div>$$A_b = \\frac{{\\pi D^2}}{{4}} = \\frac{{\\pi \\times {capacity['diameter_m']:.3f}^2}}{{4}} = {capacity['base_area_m2']:.4f}\\ \\text{{m}}^2$$</div>
+                        <div>$$A_s = \\pi D L = \\pi \\times {capacity['diameter_m']:.3f} \\times {capacity['length_m']:.3f} = {capacity['shaft_area_m2']:.4f}\\ \\text{{m}}^2$$</div>
                     </div>
+                    <table>
+                        <tr><th>Derived Parameter</th><th>Value</th></tr>
+                        <tr><td>Earth pressure coefficient K</td><td>{capacity['earth_pressure_coefficient']:.3f}</td></tr>
+                        <tr><td>Interface angle delta</td><td>{capacity['delta_deg']:.2f} deg</td></tr>
+                        <tr><td>Beta coefficient</td><td>{capacity['beta']:.3f}</td></tr>
+                        <tr><td>Bearing factor Nq</td><td>{capacity['nq']:.3f}</td></tr>
+                        <tr><td>Base area A_b</td><td>{capacity['base_area_m2']:.4f} m^2</td></tr>
+                        <tr><td>Shaft area A_s</td><td>{capacity['shaft_area_m2']:.4f} m^2</td></tr>
+                        <tr><td>Effective stress at tip</td><td>{capacity['sigma_v_tip_kPa']:.2f} kPa</td></tr>
+                        <tr><td>Average effective stress along shaft</td><td>{capacity['sigma_v_avg_kPa']:.2f} kPa</td></tr>
+                        <tr><td>Converse-Labarre theta_h</td><td>{group_efficiency['theta_h_deg']:.2f} deg</td></tr>
+                        <tr><td>Converse-Labarre theta_v</td><td>{group_efficiency['theta_v_deg']:.2f} deg</td></tr>
+                        <tr><td>Converse-Labarre theta_avg</td><td>{group_efficiency['theta_avg_deg']:.2f} deg</td></tr>
+                    </table>
                 </div>
 
-                <div class="card">
+                <div class="section">
                     <h2>Equations Used</h2>
                     <div class="equation-block">
                         <div>$$K = 1 - \\sin(\\phi) = 1 - \\sin({soil.friction_angle_deg:.2f}^\\circ) = {capacity['earth_pressure_coefficient']:.3f}$$</div>
@@ -1178,7 +1121,7 @@ class Controller(vkt.Controller):
                     <p class="equation-note">Pile group efficiency is evaluated with the Converse-Labarre method based on the horizontal and vertical pile spacing ratios.</p>
                 </div>
 
-                <div class="card">
+                <div class="section">
                     <h2>Capacity Summary</h2>
                     <table>
                         <tr><th>Result</th><th>Value</th></tr>
@@ -1192,7 +1135,7 @@ class Controller(vkt.Controller):
                     </table>
                 </div>
 
-                <div class="card">
+                <div class="section">
                     <h2>Punching Shear Check</h2>
                     <table>
                         <tr><th>Result</th><th>Value</th></tr>
@@ -1207,7 +1150,7 @@ class Controller(vkt.Controller):
                     </table>
                 </div>
 
-                <div class="card">
+                <div class="section">
                     <h2>Reaction Load Comparison</h2>
                     <table>
                         <tr>
@@ -1224,7 +1167,7 @@ class Controller(vkt.Controller):
                     </table>
                 </div>
 
-                <div class="card">
+                <div class="section">
                     <h2>Governing Cases</h2>
                     <p><strong>Worst single-pile utilization:</strong> {governing_single_text}</p>
                     <p><strong>Worst 3-pile group utilization:</strong> {governing_group_text}</p>
