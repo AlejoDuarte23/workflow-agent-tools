@@ -35,8 +35,8 @@ def calculate_bearing_pressure(F1, F2, F3, M1, M2, M3,
     # Transfer loads to neutral axis of footing (bottom of slab)
     transfer_distance = pedestal_height + h/2
     
-    # Updated loads at neutral axis (F3 is vertical, negative means compression)
-    F3_na = F3 - total_foundation_weight  # F3 is negative, foundation weight increases compression
+    # Updated loads at neutral axis (F3 is vertical, positive means compression)
+    F3_na = F3 + total_foundation_weight  # F3 is positive, foundation weight adds to compression
     M1_na = M1 + F2 * transfer_distance
     M2_na = M2 + F1 * transfer_distance
     
@@ -226,8 +226,8 @@ def optimize_footing_for_node(load_cases, min_footing_length, gamma_concrete, ga
     """
     
     # Define design space
-    L_values = [min_footing_length + i * 0.5 for i in range(20)]  # Up to min + 10m
-    B_values = [min_footing_length + i * 0.5 for i in range(20)]  # Up to min + 10m
+    L_values = [min_footing_length + i * 0.25 for i in range(20)]  # Up to min + 10m
+    B_values = [min_footing_length + i * 0.25 for i in range(20)]  # Up to min + 10m
     h_values = [0.3, 0.4, 0.5]
     pedestal_sizes = [0.3, 0.4, 0.5]  # Max pedestal size: 0.5m
     pedestal_heights = [0.7, 1.0, 1.5, 2.0, 2.5]
@@ -365,14 +365,14 @@ Minimize $W_{\\text{total}}$ subject to: $q_{\\text{max}} \\leq q_{\\text{allowa
     # Load cases for all nodes
     load_cases_section = vkt.Section("Load Cases")
     load_cases_section.load_cases = vkt.Table("Load Cases", default=[
-        {"case_name": "LC1", "node": "N1", "F1": 0.0, "F2": 0.0, "F3": -15.0, "M1": 10.0, "M2": 8.0, "M3": 0.0},
-        {"case_name": "LC2", "node": "N1", "F1": 5.0, "F2": 3.0, "F3": -18.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
-        {"case_name": "LC1", "node": "N2", "F1": 0.0, "F2": 0.0, "F3": -20.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
-        {"case_name": "LC2", "node": "N2", "F1": 8.0, "F2": 4.0, "F3": -23.0, "M1": 20.0, "M2": 18.0, "M3": 0.0},
-        {"case_name": "LC1", "node": "N3", "F1": 0.0, "F2": 0.0, "F3": -20.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
-        {"case_name": "LC2", "node": "N3", "F1": 8.0, "F2": 4.0, "F3": -23.0, "M1": 20.0, "M2": 18.0, "M3": 0.0},
-        {"case_name": "LC1", "node": "N4", "F1": 0.0, "F2": 0.0, "F3": -15.0, "M1": 10.0, "M2": 8.0, "M3": 0.0},
-        {"case_name": "LC2", "node": "N4", "F1": 5.0, "F2": 3.0, "F3": -18.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
+        {"case_name": "LC1", "node": "N1", "F1": 0.0, "F2": 0.0, "F3": 15.0, "M1": 10.0, "M2": 8.0, "M3": 0.0},
+        {"case_name": "LC2", "node": "N1", "F1": 5.0, "F2": 3.0, "F3": 18.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
+        {"case_name": "LC1", "node": "N2", "F1": 0.0, "F2": 0.0, "F3": 20.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
+        {"case_name": "LC2", "node": "N2", "F1": 8.0, "F2": 4.0, "F3": 23.0, "M1": 20.0, "M2": 18.0, "M3": 0.0},
+        {"case_name": "LC1", "node": "N3", "F1": 0.0, "F2": 0.0, "F3": 20.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
+        {"case_name": "LC2", "node": "N3", "F1": 8.0, "F2": 4.0, "F3": 23.0, "M1": 20.0, "M2": 18.0, "M3": 0.0},
+        {"case_name": "LC1", "node": "N4", "F1": 0.0, "F2": 0.0, "F3": 15.0, "M1": 10.0, "M2": 8.0, "M3": 0.0},
+        {"case_name": "LC2", "node": "N4", "F1": 5.0, "F2": 3.0, "F3": 18.0, "M1": 15.0, "M2": 12.0, "M3": 0.0},
     ])
     load_cases_section.load_cases.case_name = vkt.TextField("Load Case Name")
     load_cases_section.load_cases.node = vkt.TextField("Node Name")
@@ -392,9 +392,9 @@ Enter bearing capacity values for different foundation depths. The design will i
     section_bearing.bearing_table = vkt.Table(
         "Bearing Capacity Table",
         default=[
-            {"depth": 1.0, "bearing_capacity": 100.0},
-            {"depth": 1.5, "bearing_capacity": 150.0},
-            {"depth": 2.0, "bearing_capacity": 250.0},
+            {"depth": 1.0, "bearing_capacity": 150.0},
+            {"depth": 1.5, "bearing_capacity": 180.0},
+            {"depth": 2.0, "bearing_capacity": 200.0},
         ],
     )
     section_bearing.bearing_table.depth = vkt.NumberField("Depth (m)", num_decimals=2)

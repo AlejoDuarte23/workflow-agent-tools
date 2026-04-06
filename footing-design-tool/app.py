@@ -230,18 +230,18 @@ Enter bearing capacity values for different foundation depths. The design will i
     # Footing Dimensions (Initial values for iteration)
     section_footing = vkt.Section("Footing Dimensions")
     section_footing.b = vkt.NumberField(
-        "B: Initial Width",
+        "B: Minimum Width",
         default=1.0,
         suffix="m",
         min=0.5,
-        description="Initial footing width (starts at 1m)",
+        description="Minimum footing width - optimization starts from this value",
     )
     section_footing.l = vkt.NumberField(
-        "L: Initial Length",
+        "L: Minimum Length",
         default=1.0,
         suffix="m",
         min=0.5,
-        description="Initial footing length (starts at 1m)",
+        description="Minimum footing length - optimization starts from this value",
     )
     section_footing.h = vkt.NumberField(
         "H: Initial Thickness",
@@ -294,12 +294,28 @@ class Controller(vkt.Controller):
     parametrization = Parametrization
 
     @staticmethod
-    def get_iteration_ranges() -> dict[str, list[float]]:
-        """Get standard iteration ranges for footing design optimization.
+    def get_iteration_ranges(params) -> dict[str, list[float]]:
+        """Get iteration ranges for footing design optimization.
+
+        Args:
+            params: Parametrization instance to read initial values from
 
         Returns:
             Dictionary with pedestal_sizes, pedestal_heights, thickness_options, footing_dims
         """
+        # Get initial footing dimensions from parametrization
+        initial_b = params.section_footing.b
+        initial_l = params.section_footing.l
+
+        # Use the minimum of the two as starting point for footing_dims
+        # This ensures both B and L can start from at least their specified values
+        min_footing_dim = min(initial_b, initial_l)
+
+        # Generate footing dimensions starting from the parametrization value
+        # Calculate number of steps to reach 4.0m (or extend beyond if needed)
+        max_dim = max(4.0, min_footing_dim + 3.0)  # At least 3m range
+        num_steps = int((max_dim - min_footing_dim) / 0.2) + 1
+
         return {
             "pedestal_sizes": [
                 round(0.30 + i * 0.05, 2) for i in range(7)
@@ -311,8 +327,8 @@ class Controller(vkt.Controller):
                 round(0.30 + i * 0.10, 2) for i in range(4)
             ],  # 0.30 to 0.60, step 100mm
             "footing_dims": [
-                round(1.0 + i * 0.2, 1) for i in range(16)
-            ],  # 1.0 to 4.0, step 0.2m
+                round(min_footing_dim + i * 0.2, 1) for i in range(num_steps)
+            ],  # Starts from parametrization value, step 0.2m
         }
 
     @staticmethod
@@ -368,7 +384,7 @@ class Controller(vkt.Controller):
         get_bearing_capacity = create_bearing_capacity_interpolator(bearing_table)
 
         # Get iteration ranges
-        ranges = self.get_iteration_ranges()
+        ranges = self.get_iteration_ranges(params)
         pedestal_sizes = ranges["pedestal_sizes"]
         pedestal_heights = ranges["pedestal_heights"]
         thickness_options = ranges["thickness_options"]
@@ -558,7 +574,7 @@ class Controller(vkt.Controller):
     def view_footing_iterations(self, params, **kwargs):
         """Display detailed iteration results and optimal designs for each node."""
         # Get iteration ranges for display
-        ranges = self.get_iteration_ranges()
+        ranges = self.get_iteration_ranges(params)
 
         # Calculate optimal designs for all nodes
         optimal_designs, coords_by_node, reactions_by_node = (
