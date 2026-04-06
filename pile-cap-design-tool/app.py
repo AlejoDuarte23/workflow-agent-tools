@@ -1,6 +1,8 @@
 import math
+import json
 from dataclasses import dataclass
 from html import escape
+from io import BytesIO
 
 import numpy as np
 import viktor as vkt
@@ -8,6 +10,10 @@ import viktor as vkt
 
 N_PILES_IN_GROUP = 3
 MIN_GROUP_SPACING_RATIO = 2.5
+EXPORT_PILE_LENGTH_STEP_MM = 500.0
+EXPORT_MAX_PILE_LENGTH_MM = 60000.0
+EXPORT_LENGTH1_MM = 450.0
+EXPORT_PILE_CUT_OUT_MM = 75.0
 
 
 @dataclass
@@ -240,6 +246,87 @@ def find_governing_row(rows, utilization_key: str):
     if not filtered_rows:
         return None
     return max(filtered_rows, key=lambda row: row[utilization_key])
+
+
+def build_soil_from_params(params):
+    return SoilParameters(
+        name=params.soil_section.soil_name,
+        unit_weight_kN_m3=params.soil_section.unit_weight,
+        friction_angle_deg=params.soil_section.friction_angle,
+        notes=params.soil_section.soil_notes,
+    )
+
+
+def evaluate_axial_design(params, pile_length_mm: float):
+    soil = build_soil_from_params(params)
+    validation = validate_design_inputs(
+        pile_diameter_mm=params.pile_section.pile_diameter,
+        pile_length_mm=pile_length_mm,
+        pile_cap_thickness_mm=params.cap_section.pile_cap_thickness,
+        pile_centres_horizontal_mm=params.pile_section.pile_centres_horizontal,
+        pile_centres_vertical_mm=params.pile_section.pile_centres_vertical,
+        factor_of_safety=params.soil_section.factor_of_safety,
+        soil=soil,
+        column_size_mm=params.cap_section.column_size,
+        clear_cover_mm=params.cap_section.clear_cover,
+        bar_diameter_mm=params.cap_section.bar_diameter,
+        concrete_strength_mpa=params.concrete_section.concrete_strength,
+        phi_shear=params.concrete_section.phi_shear,
+    )
+
+    if not validation["ok"]:
+        return {"ok": False, "validation": validation}
+
+    capacity = calculate_axial_capacity(
+        pile_diameter_mm=params.pile_section.pile_diameter,
+        pile_length_mm=pile_length_mm,
+        factor_of_safety=params.soil_section.factor_of_safety,
+        soil=soil,
+    )
+    group_efficiency = calculate_group_efficiency(
+        spacing_ratio_h=validation["spacing_ratio_h"],
+        spacing_ratio_v=validation["spacing_ratio_v"],
+    )
+    allowable_group_kN = (
+        group_efficiency["efficiency"] * N_PILES_IN_GROUP * capacity["allowable_single_kN"]
+    )
+    comparison_rows = build_reaction_rows(
+        reaction_rows=params.reaction_loads_section.load_cases,
+        allowable_single_kN=capacity["allowable_single_kN"],
+        allowable_group_kN=allowable_group_kN,
+    )
+    all_group_rows_pass = all(
+        row["group_utilization"] is not None and row["group_utilization"] <= 1.0
+        for row in comparison_rows
+    )
+    return {
+        "ok": True,
+        "soil": soil,
+        "validation": validation,
+        "capacity": capacity,
+        "group_efficiency": group_efficiency,
+        "allowable_group_kN": allowable_group_kN,
+        "comparison_rows": comparison_rows,
+        "all_group_rows_pass": all_group_rows_pass,
+    }
+
+
+def find_compliant_pile_length(params):
+    pile_length_mm = float(params.pile_section.pile_length)
+    last_result = None
+
+    while pile_length_mm <= EXPORT_MAX_PILE_LENGTH_MM:
+        result = evaluate_axial_design(params, pile_length_mm)
+        if not result["ok"]:
+            return {"ok": False, "result": result, "pile_length_mm": pile_length_mm}
+
+        last_result = result
+        if result["all_group_rows_pass"]:
+            return {"ok": True, "result": result, "pile_length_mm": pile_length_mm}
+
+        pile_length_mm += EXPORT_PILE_LENGTH_STEP_MM
+
+    return {"ok": False, "result": last_result, "pile_length_mm": pile_length_mm - EXPORT_PILE_LENGTH_STEP_MM}
 
 
 def create_validation_error_html(errors, warnings):
@@ -624,9 +711,53 @@ This tool evaluates axial pile capacity for the existing 3-pile cap layout and c
         description="Strength reduction factor used for punching shear",
     )
 
+    download_section = vkt.Section("Export Results")
+    download_section.download_btn = vkt.DownloadButton(
+        "Download Pile Cap Layout (JSON)",
+        method="download_results",
+    )
+
 
 class Controller(vkt.Controller):
     parametrization = Parametrization
+
+    def download_results(self, params, **kwargs):
+        search = find_compliant_pile_length(params)
+        if not search["ok"]:
+            raise vkt.UserError(
+                f"No compliant pile length was found up to {EXPORT_MAX_PILE_LENGTH_MM:.0f} mm."
+            )
+
+        export_pile_length_mm = search["pile_length_mm"]
+        export_data = {
+            "parameters": {
+                "foundationThickness": float(params.cap_section.pile_cap_thickness),
+                "widthIndent": float(params.cap_section.width_indent),
+                "pileLength": float(export_pile_length_mm),
+                "pileDiameter": float(params.pile_section.pile_diameter),
+                "pileCentresVertical": float(params.pile_section.pile_centres_vertical),
+                "pileCentresHorizontal": float(params.pile_section.pile_centres_horizontal),
+                "length1": EXPORT_LENGTH1_MM,
+                "length2": float(params.cap_section.length2),
+                "pileCutOut": EXPORT_PILE_CUT_OUT_MM,
+                "clearance": float(params.cap_section.clearance),
+            },
+            "placements": [
+                {
+                    "x": float(get_row_value(node_row, "x", 0.0) or 0.0) * 1000.0,
+                    "y": float(get_row_value(node_row, "y", 0.0) or 0.0) * 1000.0,
+                    "z": float(get_row_value(node_row, "z", 0.0) or 0.0) * 1000.0,
+                }
+                for node_row in params.nodes_section.nodes
+            ],
+        }
+
+        json_str = json.dumps(export_data, indent=2)
+        json_bytes = BytesIO(json_str.encode("utf-8"))
+        return vkt.DownloadResult(
+            vkt.File.from_data(json_bytes.getvalue()),
+            "pile_cap_layout.json",
+        )
 
     @vkt.PlotlyView("Pile Cap Layout (2D)", duration_guess=3)
     def view_pile_cap_layout(self, params, **kwargs):
@@ -806,51 +937,17 @@ class Controller(vkt.Controller):
         concrete_strength_mpa = params.concrete_section.concrete_strength
         phi_shear = params.concrete_section.phi_shear
 
-        soil = SoilParameters(
-            name=params.soil_section.soil_name,
-            unit_weight_kN_m3=params.soil_section.unit_weight,
-            friction_angle_deg=params.soil_section.friction_angle,
-            notes=params.soil_section.soil_notes,
-        )
-
-        validation = validate_design_inputs(
-            pile_diameter_mm=pile_diameter_mm,
-            pile_length_mm=pile_length_mm,
-            pile_cap_thickness_mm=pile_cap_thickness_mm,
-            pile_centres_horizontal_mm=pile_centres_horizontal_mm,
-            pile_centres_vertical_mm=pile_centres_vertical_mm,
-            factor_of_safety=factor_of_safety,
-            soil=soil,
-            column_size_mm=column_size_mm,
-            clear_cover_mm=clear_cover_mm,
-            bar_diameter_mm=bar_diameter_mm,
-            concrete_strength_mpa=concrete_strength_mpa,
-            phi_shear=phi_shear,
-        )
-
-        if not validation["ok"]:
+        evaluation = evaluate_axial_design(params, pile_length_mm)
+        if not evaluation["ok"]:
+            validation = evaluation["validation"]
             return vkt.WebResult(html=create_validation_error_html(validation["errors"], validation["warnings"]))
 
-        capacity = calculate_axial_capacity(
-            pile_diameter_mm=pile_diameter_mm,
-            pile_length_mm=pile_length_mm,
-            factor_of_safety=factor_of_safety,
-            soil=soil,
-        )
-
-        group_efficiency = calculate_group_efficiency(
-            spacing_ratio_h=validation["spacing_ratio_h"],
-            spacing_ratio_v=validation["spacing_ratio_v"],
-        )
-        allowable_group_kN = (
-            group_efficiency["efficiency"] * N_PILES_IN_GROUP * capacity["allowable_single_kN"]
-        )
-
-        comparison_rows = build_reaction_rows(
-            reaction_rows=params.reaction_loads_section.load_cases,
-            allowable_single_kN=capacity["allowable_single_kN"],
-            allowable_group_kN=allowable_group_kN,
-        )
+        soil = evaluation["soil"]
+        validation = evaluation["validation"]
+        capacity = evaluation["capacity"]
+        group_efficiency = evaluation["group_efficiency"]
+        allowable_group_kN = evaluation["allowable_group_kN"]
+        comparison_rows = evaluation["comparison_rows"]
 
         allowable_group_display = f"{allowable_group_kN:.2f} kN"
 
